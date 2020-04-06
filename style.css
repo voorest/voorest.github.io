@@ -1,0 +1,102 @@
+body {
+font-family:Arial,"Helvetica CY","Nimbus Sans L",sans-serif;
+margin: 0;
+padding: 0;
+box-sizing: border-box;
+font-size: 14px;
+color: #333333;
+background-color: #fefefe;
+}
+* {
+margin: 0;
+padding: 0;
+box-sizing: border-box;
+}
+.wrap{
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 50px 0;
+}
+.git{
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+}
+.git-version{
+    padding: 10px 0 10px 100px;
+}
+.git-version span{
+    background-color: #bcd54b;
+    border: 2px solid #9ec61c;
+    border-radius: 8px;
+    padding: 4px 8px;
+    text-align: center;
+    min-width: 30px;
+    min-height: 30px;
+    line-height: 30px;
+}
+.git-branch{
+    padding: 15px 0;
+    position: relative;
+}
+.git-branch:after{
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    display: block;
+    width: 100%;
+    height: 1px;
+    border-bottom: 1px dashed #aaa;
+    z-index: -1;
+    
+}
+.git-branch:not(:last-child){
+    margin-bottom: 20px;
+}
+.branch-name{
+    padding: 4px 8px;
+    border-radius: 8px;
+    background-color: #fff;
+    display: inline-block;
+    border: 2px solid #fff;
+    min-width: 80px;
+    text-align: center;
+    float: left;
+}
+.dot{
+    width: 28px;
+    height: 28px;
+    border-radius: 100%;
+    display: inline-block;
+}
+.git-master .branch-name, .git-master .dot{
+    background-color: #bcd54b;
+    border: 2px solid #9ec61c;
+}
+.git-hotfix .branch-name, .git-hotfix .dot{
+    background-color: #c596c4;
+    border: 2px solid #ac74af;
+}
+.git-release .branch-name, .git-release .dot{
+    background-color: #fbed39;
+    border: 2px solid #eed554;
+}
+.git-develop .branch-name, .git-develop .dot{
+    background-color: #f8a35d;
+    border: 2px solid #f18d45;
+}
+.git-feature .branch-name, .git-feature .dot{
+    background-color: #78cfeb;
+    border: 2px solid #57afe3;
+}
+.v01{
+    margin-left: 0;
+}
+.v02{
+    margin-left: 70px;
+}
+.v1{
+    margin-left: 220px;
+}
