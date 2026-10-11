@@ -1,7 +1,7 @@
 {
   "name": "mafia-bcn",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Mafia BCN game log: games, stats and titles for our weekend Mafia games",
   "scripts": {
     "dev": "wrangler dev",
@@ -11,5 +11,6 @@
   },
   "devDependencies": {
     "wrangler": "^4.20.0"
-  }
+  },
+  "type": "module"
 }

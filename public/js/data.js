@@ -33,11 +33,27 @@ function pct(x) {
 
 const DEFAULT_SETTINGS = { minGames: 3, priorWeight: 5, defaultSeats: 10 };
 
+/** Small JSON fetch helper for our API. Throws Error(message) on failure. */
+async function api(path, { method = 'GET', body } = {}) {
+  const res = await fetch(path, {
+    method,
+    credentials: 'same-origin',
+    headers: body !== undefined ? { 'content-type': 'application/json' } : {},
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
 const Store = (() => {
   const KEY = 'mafia-bcn-db';
-  const SETTINGS_KEY = 'mafia-bcn-settings';
   let db = null;
   let mode = 'local';
+  let me = { loginAvailable: false, user: null };
+  let admin = { players: [], accounts: [] };      // private data, admin only
+  const listeners = new Set();
+  let saveState = 'idle';                         // idle | saving | saved | error
 
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   const empty = () => ({ schema: 2, players: [], games: [], settings: { ...DEFAULT_SETTINGS } });
@@ -66,7 +82,7 @@ const Store = (() => {
     const out = {
       ...base, ...d,
       settings: { ...base.settings, ...(d.settings || {}) },
-      players: (Array.isArray(d.players) ? d.players : []).map(p => ({ ...p, id: String(p.id), nickname: p.nickname || p.name || '?' })),
+      players: (Array.isArray(d.players) ? d.players : []).map((p, i) => ({ ...p, id: String(p.id), number: p.number || i + 1, nickname: p.nickname || p.name || '?' })),
       games: (Array.isArray(d.games) ? d.games : []).map(g => ({
         notes: '', source: 'app', ...g,
         id: String(g.id),
@@ -82,11 +98,12 @@ const Store = (() => {
   async function init() {
     if (location.protocol.startsWith('http')) {
       try {
-        const res = await fetch('api/data', { headers: { Accept: 'application/json' } });
+        const res = await fetch('/api/data', { headers: { Accept: 'application/json' } });
         if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
           db = normalize(await res.json());
           mode = 'live';
-          db.settings = { ...DEFAULT_SETTINGS, ...readLocalSettings() };
+          try { me = await api('/api/me'); } catch (e) { /* not logged in */ }
+          if (isAdmin()) await loadAdmin();
           return db;
         }
       } catch (e) { /* no API here → local mode */ }
@@ -96,15 +113,13 @@ const Store = (() => {
     catch (e) { db = empty(); }
     return db;
   }
-  function readLocalSettings() {
-    try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch (e) { return {}; }
+  async function loadAdmin() {
+    try { admin = await api('/api/admin/players'); } catch (e) { console.warn(e); }
+    return admin;
   }
 
-  function save() {
-    if (mode === 'live') {
-      try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(db.settings)); } catch (e) { /* ignore */ }
-      return true;
-    }
+  function saveLocal() {
+    if (mode !== 'local') return true;
     db.updatedAt = new Date().toISOString();
     try { localStorage.setItem(KEY, JSON.stringify(db)); return true; }
     catch (e) { console.error(e); alert('Could not save to browser storage: ' + e.message); return false; }
@@ -112,55 +127,130 @@ const Store = (() => {
 
   const get = () => db;
   const isLive = () => mode === 'live';
-  const canEdit = () => mode === 'local';
-  function replace(newDb) { db = normalize(newDb); save(); }
-  function clear() { db = empty(); save(); }
+  const user = () => me.user;
+  const loginAvailable = () => me.loginAvailable;
+  const isAdmin = () => mode === 'live' && me.user && me.user.role === 'admin';
+  const canEdit = () => mode === 'local' || isAdmin();
+  const adminData = () => admin;
+
+  /* ---- save status (shown in the top bar) ---- */
+  function setSaveState(s, msg) { saveState = s; listeners.forEach(fn => fn(s, msg)); }
+  const onSaveState = fn => listeners.add(fn);
+
+  function replace(newDb) { db = normalize(newDb); saveLocal(); }
+  function clear() { db = empty(); saveLocal(); }
 
   /* ---------- players ---------- */
-  function addPlayer(nickname) {
+  async function addPlayer(nickname) {
     nickname = String(nickname || '').trim();
     if (!nickname) return null;
     const existing = db.players.find(p => p.nickname.toLowerCase() === nickname.toLowerCase());
     if (existing) return existing;
-    const p = { id: uid(), nickname, createdAt: new Date().toISOString() };
+    let p;
+    if (isLive()) {
+      p = await api('/api/admin/players', { method: 'POST', body: { nickname } });
+      admin.players.push({ ...p, first_name: null, last_name: null });
+    } else {
+      p = { id: uid(), number: Math.max(0, ...db.players.map(x => x.number || 0)) + 1, nickname, createdAt: new Date().toISOString() };
+    }
     db.players.push(p);
-    save();
+    saveLocal();
     return p;
   }
-  function updatePlayer(id, patch) { const p = player(id); if (p) { Object.assign(p, patch); save(); } }
-  const playerInUse = id => db.games.some(g => g.seats.some(s => s.playerId === id));
-  function deletePlayer(id) {
+  async function updatePlayer(id, patch) {
+    const p = player(id);
+    if (!p) return;
+    if (isLive()) {
+      await api('/api/admin/players/' + id, { method: 'PATCH', body: patch });
+      await loadAdmin();
+    }
+    if (patch.nickname) p.nickname = patch.nickname;
+    saveLocal();
+  }
+  const playerInUse = id => db.games.some(g => g.seats.some(s => s.playerId === String(id)));
+  async function deletePlayer(id) {
     if (playerInUse(id)) return false;
-    db.players = db.players.filter(p => p.id !== id);
-    save();
+    if (isLive()) await api('/api/admin/players/' + id, { method: 'DELETE' });
+    db.players = db.players.filter(p => p.id !== String(id));
+    saveLocal();
     return true;
+  }
+  async function updateAccount(id, patch) {
+    await api('/api/admin/accounts/' + id, { method: 'PATCH', body: patch });
+    await loadAdmin();
   }
   const player = id => db.players.find(p => p.id === String(id));
   const playerName = id => (player(id) || {}).nickname || '(unknown)';
 
   /* ---------- games ---------- */
-  function newGame(date) {
-    const n = db.settings.defaultSeats || 10;
-    const sameDay = db.games.filter(g => g.date === date);
-    const g = {
-      id: uid(), date,
-      number: sameDay.length ? Math.max(...sameDay.map(x => x.number)) + 1 : 1,
-      seats: Array.from({ length: n }, (_, i) => ({ seat: i + 1, playerId: null, role: null, alive: null, fouls: 0 })),
-      rounds: [], winner: null, notes: '', source: 'app',
-      createdAt: new Date().toISOString(),
-    };
-    db.games.push(g);
-    save();
-    return g;
+  async function newGame(date) {
+    let g;
+    if (isLive()) {
+      g = await api('/api/admin/games', { method: 'POST', body: { date, seats: db.settings.defaultSeats } });
+    } else {
+      const n = db.settings.defaultSeats || 10;
+      const sameDay = db.games.filter(x => x.date === date);
+      g = {
+        id: uid(), date,
+        number: sameDay.length ? Math.max(...sameDay.map(x => x.number)) + 1 : 1,
+        seats: Array.from({ length: n }, (_, i) => ({ seat: i + 1, playerId: null, role: null, alive: null, fouls: 0 })),
+        rounds: [], winner: null, notes: '', source: 'app', createdAt: new Date().toISOString(),
+      };
+    }
+    db.games.push(normalize({ games: [g] }).games[0]);
+    saveLocal();
+    return game(g.id);
+  }
+
+  // Live saves are queued so they reach the server in order; only the latest state matters.
+  const pending = new Map();
+  let chain = Promise.resolve();
+  function saveGame(g) {
+    if (!isLive()) { saveLocal(); return Promise.resolve(); }
+    const tl = GameLogic.timeline(g);
+    const payload = JSON.parse(JSON.stringify({
+      ...g,
+      seats: g.seats.map(s => ({ ...s, alive: g.source === 'xls' ? s.alive : (tl.alive.includes(s.seat) ? 1 : 0) })),
+    }));
+    pending.set(g.id, payload);
+    setSaveState('saving');
+    chain = chain.then(async () => {
+      const body = pending.get(g.id);
+      if (!body) return;
+      pending.delete(g.id);
+      try {
+        await api('/api/admin/games/' + g.id, { method: 'PUT', body });
+        if (!pending.size) setSaveState('saved');
+      } catch (e) {
+        setSaveState('error', e.message);
+      }
+    });
+    return chain;
   }
   const game = id => db.games.find(g => g.id === String(id));
-  function deleteGame(id) { db.games = db.games.filter(g => g.id !== String(id)); save(); }
+  async function deleteGame(id) {
+    if (isLive()) await api('/api/admin/games/' + id, { method: 'DELETE' });
+    db.games = db.games.filter(g => g.id !== String(id));
+    saveLocal();
+  }
   const sortedGames = () => [...db.games].sort((a, b) => b.date.localeCompare(a.date) || b.number - a.number);
 
+  async function saveSettings(patch) {
+    if (isLive()) await api('/api/admin/settings', { method: 'PUT', body: patch });
+    Object.assign(db.settings, patch);
+    saveLocal();
+  }
+
+  async function logout() {
+    await api('/api/auth/logout', { method: 'POST' });
+    location.reload();
+  }
+
   return {
-    uid, init, save, get, isLive, canEdit, replace, clear,
-    addPlayer, updatePlayer, deletePlayer, playerInUse, player, playerName,
-    newGame, game, deleteGame, sortedGames,
+    uid, init, get, isLive, canEdit, isAdmin, user, loginAvailable, adminData, loadAdmin,
+    onSaveState, replace, clear, saveLocal, logout,
+    addPlayer, updatePlayer, deletePlayer, updateAccount, playerInUse, player, playerName,
+    newGame, saveGame, game, deleteGame, sortedGames, saveSettings,
   };
 })();
 
@@ -204,7 +294,7 @@ const GameLogic = {
       this.nightDeaths(r.night || {}).forEach(d => { if (alive.has(d.seat)) { alive.delete(d.seat); fates[d.seat] = { type: d.type, round: n }; } });
     });
     // Imported games only know "alive at the end": trust that when it is recorded.
-    const explicit = game.seats.some(s => s.alive === 0 || s.alive === 1);
+    const explicit = game.source === 'xls' && game.seats.some(s => s.alive === 0 || s.alive === 1);
     let finalAlive = [...alive];
     if (explicit) {
       finalAlive = game.seats.filter(s => s.alive === 1).map(s => s.seat);
@@ -242,6 +332,19 @@ const GameLogic = {
     if (noRole) w.push(`${noRole} seat(s) without a role`);
     const c = this.roleCounts(game);
     if (!noRole && c.don + c.mafia === 0) w.push('No mafia in this game?');
+    // consistency checks (useful for imported games)
+    const tl = this.timeline(game);
+    game.rounds.forEach((r, i) => {
+      (r.eliminated || []).forEach(s => { if (tl.alive.includes(s)) w.push(`Seat ${s} is voted out on day ${i + 1} but marked alive at the end`); });
+      const dayAlive = (tl.phases.find(p => p.round === i + 1 && p.phase === 'day') || { alive: [] }).alive;
+      (r.nominations || []).forEach(n => { if (n.by && !dayAlive.includes(n.by)) w.push(`Day ${i + 1}: seat ${n.by} nominates but was already out`); });
+    });
+    if (game.winner && !noRole) {
+      const mafia = tl.alive.filter(n => this.teamOf(game, n) === 'mafia').length;
+      const town = tl.alive.length - mafia;
+      if (game.winner === 'town' && mafia > 0) w.push('Citizens won, but some mafia are marked alive at the end');
+      if (game.winner === 'mafia' && mafia < town) w.push('Mafia won, but fewer mafia than citizens are alive at the end');
+    }
     return w;
   },
 };

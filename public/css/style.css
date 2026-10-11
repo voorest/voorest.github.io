@@ -303,3 +303,22 @@ td.neg, .kpi-val.neg { color: var(--danger); }
 .role-select.role-doctor { color: var(--doctor); }
 .role-select.role-maniac { color: var(--maniac); }
 .nom-row.ro { max-width: 520px; }
+
+/* ---------- v3: login, admin ---------- */
+.topbar .spacer { flex: 1; }
+.auth { display: flex; align-items: center; gap: .5rem; white-space: nowrap; }
+.auth .who { font-size: .9rem; }
+.btn.tg { background: #2aabee; border-color: #2aabee; color: #fff; font-weight: 600; }
+.btn.tg:hover { filter: brightness(1.08); background: #2aabee; }
+.chip.admin { color: var(--accent); border-color: rgba(214, 165, 72, .5); }
+.save-state { font-size: .85rem; color: var(--muted); white-space: nowrap; }
+.save-state.saving { color: var(--warn); }
+.save-state.saved { color: var(--ok); }
+.save-state.error { color: var(--danger); font-weight: 600; }
+.pick.on-ok { border-color: var(--ok); background: rgba(79, 181, 125, .15); }
+tr.editing td { background: var(--surface-2); }
+.edit-player .field input { min-width: 160px; }
+@media (max-width: 760px) {
+  .topbar { flex-wrap: wrap; row-gap: .4rem; }
+  .topbar nav { order: 3; width: 100%; }
+}

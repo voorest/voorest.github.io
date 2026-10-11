@@ -34,6 +34,13 @@ git push origin dev     # does NOT deploy
 git checkout master && git merge dev && git push   # deploys
 ```
 
+## Login & admin
+
+Secrets live in Cloudflare (Worker → Settings → Variables and Secrets), never in this repo:
+`TELEGRAM_CLIENT_ID`, `TELEGRAM_CLIENT_SECRET` (from @BotFather → Login Widget) and `TELEGRAM_BOT_TOKEN`.
+Telegram redirects back to `/api/auth/telegram/callback`. Sessions are stored in D1 (`sessions`), and the cookie holds a random token.
+Admins are accounts with `role = 'admin'`.
+
 ## Database
 
 Tables: `players` (public nickname + private names), `accounts` (Telegram/Google logins linked to a player),
@@ -56,8 +63,8 @@ expect from the roles a player got (mafia wins less often than citizens in our g
 - [x] Local prototype
 - [x] Cloudflare Worker + D1 database, spreadsheet imported (14 games, 26 players)
 - [x] Game model matching the paper notes (nominations, night actions, doctor, maniac)
-- [ ] Telegram login (@mafia_bcn_bot), admin role
-- [ ] Admin: add/edit games, players and nicknames from the website
-- [ ] Linking players to Telegram accounts (admin sets it; optional "that's me" request)
-- [ ] Personal "my stats" page
+- [x] Telegram login (@mafia_bcn_bot, OpenID Connect), admin role
+- [x] Admin: add/edit games, players, nicknames, private names and settings from the website
+- [x] Linking players to Telegram accounts (admin pre-fills @username, or links a login by hand)
+- [x] Personal "My stats" page
 - [ ] Automatic JSON backups, announcements, notifications

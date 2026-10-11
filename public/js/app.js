@@ -1,13 +1,13 @@
 /* ============================================================
    UI — tiny hash router + views
-   #/dashboard  #/games  #/game/:id  #/players  #/player/:id  #/data
+   #/dashboard  #/games  #/game/:id  #/players  #/player/:id  #/data  #/settings  #/me
    ============================================================ */
 'use strict';
 
 const $app = document.getElementById('app');
 const $ = sel => $app.querySelector(sel);
 const $$ = sel => [...$app.querySelectorAll(sel)];
-const UI = { lbSort: { key: 'rating', dir: -1 } };
+const UI = { lbSort: { key: 'rating', dir: -1 }, plSort: { key: 'number', dir: -1 }, editingPlayer: null };
 
 /* ---------- helpers ---------- */
 const h = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -25,7 +25,10 @@ function toast(msg) {
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => t.classList.remove('show'), 2200);
+  toast._t = setTimeout(() => t.classList.remove('show'), 2600);
+}
+async function attempt(fn) {
+  try { return await fn(); } catch (e) { toast('⚠ ' + e.message); return undefined; }
 }
 const roleChip = role => role ? `<span class="chip role-${role}" title="${ROLES[role].short}">${ROLES[role].label}</span>` : '<span class="chip muted">no role</span>';
 const winnerChip = w => w ? `<span class="chip team-${w}">${w === 'town' ? 'Citizens won' : 'Mafia won'}</span>` : '<span class="chip warn">In progress</span>';
@@ -58,6 +61,32 @@ function loadDemo() {
   route();
 }
 
+/* ---------- top bar: login + save status ---------- */
+function renderAuth() {
+  const el = document.getElementById('auth');
+  const me = document.getElementById('navMe');
+  const u = Store.user();
+  me.hidden = !(u && u.playerId);
+  if (!Store.isLive()) { el.innerHTML = '<span class="chip muted">local mode</span>'; return; }
+  if (u) {
+    el.innerHTML = `<span class="who">${h(u.nickname || (u.username ? '@' + u.username : u.name || 'you'))}${u.role === 'admin' ? ' <span class="chip admin">admin</span>' : ''}</span>
+      <button class="btn small ghost" id="logoutBtn">Log out</button>`;
+    document.getElementById('logoutBtn').onclick = () => attempt(() => Store.logout());
+  } else if (Store.loginAvailable()) {
+    el.innerHTML = `<a class="btn small tg" href="/api/auth/telegram/start?back=${encodeURIComponent('/' + (location.hash || ''))}">Log in with Telegram</a>`;
+  } else {
+    el.innerHTML = '';
+  }
+}
+Store.onSaveState((s, msg) => {
+  const el = document.getElementById('saveState');
+  el.className = 'save-state ' + s;
+  el.textContent = { saving: 'Saving…', saved: 'Saved ✓', error: 'Save failed' }[s] || '';
+  el.title = msg || '';
+  if (s === 'error') toast('⚠ Not saved: ' + msg);
+  if (s === 'saved') { clearTimeout(el._t); el._t = setTimeout(() => { el.textContent = ''; }, 2500); }
+});
+
 /* ---------- router ---------- */
 function route() {
   const parts = (location.hash || '#/dashboard').replace(/^#\/?/, '').split('/');
@@ -70,11 +99,16 @@ function route() {
     banner = db.demo
       ? `<div class="demo-banner">Local mode with <b>demo data</b>. Real data lives on the live site.</div>`
       : `<div class="demo-banner subtle">Local mode — data is stored in this browser only.</div>`;
+  } else if (Store.isAdmin()) {
+    banner = `<div class="demo-banner subtle">Admin mode — your changes are saved to the database immediately.</div>`;
   }
   document.getElementById('banner').innerHTML = banner;
+  renderAuth();
   const views = {
     dashboard: viewDashboard, games: viewGames, game: () => viewGame(id),
-    players: viewPlayers, player: () => viewPlayer(id), data: viewData,
+    players: viewPlayers, player: () => viewPlayer(id), data: viewData, settings: viewSettings,
+    me: () => { const u = Store.user(); if (u && u.playerId) viewPlayer(u.playerId); else viewDashboard(); },
+    'login-error': () => { $app.innerHTML = `<div class="empty"><h2>Login didn't work</h2><p>${h(decodeURIComponent(id || ''))}</p><p><a class="btn" href="/api/auth/telegram/start">Try again</a></p></div>`; },
   };
   (views[view] || viewDashboard)();
 }
@@ -84,11 +118,12 @@ window.addEventListener('hashchange', () => { route(); window.scrollTo(0, 0); })
    DASHBOARD
    ============================================================ */
 const LB_COLS = [
+  { key: 'number', label: 'No.', get: p => p.number, title: 'Player number = order in which players joined our stats' },
   { key: 'name', label: 'Player', get: p => p.name.toLowerCase() },
   { key: 'games', label: 'Games', get: p => p.games },
   { key: 'wins', label: 'Wins', get: p => p.wins },
   { key: 'winRate', label: 'Win %', get: p => p.winRate },
-  { key: 'rating', label: 'Rating', get: p => p.rating, title: 'Win rate adjusted for number of games (see Data → Settings)' },
+  { key: 'rating', label: 'Rating', get: p => p.rating, title: 'Win rate adjusted for number of games (see Settings)' },
   { key: 'aboveExpected', label: '± exp.', get: p => p.aboveExpected, title: 'Wins above/below what is expected for the roles this player got' },
   { key: 'days', label: 'Days', get: p => p.days },
   ...ROLE_ORDER.map(r => ({ key: r, label: ROLES[r].label, get: p => p.roleRating[r] + p.byRole[r].g / 1e4 })),
@@ -108,7 +143,7 @@ function viewDashboard() {
         <p>No finished games yet.</p>
         ${Store.canEdit() ? `<div class="row gap wrap">
           <a class="btn primary" href="#/games">Record a game</a>
-          <button class="btn ghost" id="demoBtn">Load demo data</button>
+          ${Store.isLive() ? '' : '<button class="btn ghost" id="demoBtn">Load demo data</button>'}
         </div>` : ''}
       </section>`;
     if ($('#demoBtn')) $('#demoBtn').onclick = loadDemo;
@@ -117,7 +152,7 @@ function viewDashboard() {
 
   const titles = Stats.titles(st, db.settings);
   const { key, dir } = UI.lbSort;
-  const col = LB_COLS.find(c => c.key === key) || LB_COLS[4];
+  const col = LB_COLS.find(c => c.key === key) || LB_COLS[5];
   const sorted = [...st.players].sort((a, b) => {
     const va = col.get(a), vb = col.get(b);
     if (va < vb) return -dir;
@@ -166,6 +201,7 @@ function viewDashboard() {
             ${sorted.map((p, i) => `
               <tr>
                 <td class="muted">${i + 1}</td>
+                <td class="muted">${p.number}</td>
                 <td><a href="#/player/${p.id}">${h(p.name)}</a></td>
                 <td>${p.games}</td>
                 <td>${p.wins}</td>
@@ -180,8 +216,8 @@ function viewDashboard() {
           </tbody>
         </table>
       </div>
-      <p class="muted small"><b>Rating</b> = win rate adjusted for how many games someone played: (wins + ${st.K} × ${pct(st.overallRate)}) ÷ (games + ${st.K}). Few games → close to the average; many games → your real results.
-      <b>± exp.</b> = wins above what the roles you got would normally give. Role columns: wins/games. Click a header to sort.</p>
+      <p class="muted small"><b>No.</b> = player number in order of joining (new players get the next number). <b>Rating</b> = win rate adjusted for number of games, see <a href="#/settings">Settings</a>.
+      <b>± exp.</b> = wins above what the roles a player got would normally give. Role columns: wins/games. Click a header to sort.</p>
     </section>
 
     <div class="grid-2">
@@ -255,14 +291,15 @@ function viewGames() {
       </section>`).join('')
       : `<div class="empty">No games yet.</div>`}
   `;
-  if ($('#newGame')) $('#newGame').onclick = () => {
-    const g = Store.newGame($('#newDate').value || localToday());
+  if ($('#newGame')) $('#newGame').onclick = () => attempt(async () => {
+    $('#newGame').disabled = true;
+    const g = await Store.newGame($('#newDate').value || localToday());
     location.hash = '#/game/' + g.id;
-  };
+  }).finally(() => { if ($('#newGame')) $('#newGame').disabled = false; });
 }
 
 /* ============================================================
-   GAME SCREEN — editor in local mode, read-only on the live site
+   GAME SCREEN — editor for the admin (and in local mode), read-only otherwise
    ============================================================ */
 function viewGame(id) {
   const g = Store.game(id);
@@ -270,6 +307,7 @@ function viewGame(id) {
   const ro = !Store.canEdit();
   const dis = ro ? 'disabled' : '';
   const db = Store.get();
+  const imported = g.source === 'xls';
   const tl = GameLogic.timeline(g);
   const seatBy = n => g.seats.find(s => s.seat === +n);
   const name = n => { const s = seatBy(n); return s && s.playerId ? Store.playerName(s.playerId) : '—'; };
@@ -289,7 +327,7 @@ function viewGame(id) {
     const f = alive ? null : tl.fates[s.seat];
     return `<tr class="${alive ? '' : 'dead'}">
       <td class="seatno">${s.seat}</td>
-      <td>${ro ? `<a href="#/player/${s.playerId}">${h(name(s.seat))}</a>` : `<select data-act="seat-player" data-seat="${s.seat}" class="${s.playerId && used[s.playerId] > 1 ? 'bad' : ''}">
+      <td>${ro ? (s.playerId ? `<a href="#/player/${s.playerId}">${h(name(s.seat))}</a>` : '—') : `<select data-act="seat-player" data-seat="${s.seat}" class="${s.playerId && used[s.playerId] > 1 ? 'bad' : ''}">
         <option value="">— pick player —</option>
         ${players.map(p => `<option value="${p.id}" ${p.id === s.playerId ? 'selected' : ''}>${h(p.nickname)}${used[p.id] && p.id !== s.playerId ? ' (seated)' : ''}</option>`).join('')}
       </select>`}</td>
@@ -298,6 +336,7 @@ function viewGame(id) {
         ${ROLE_ORDER.map(r => `<option value="${r}" ${s.role === r ? 'selected' : ''}>${ROLES[r].label} (${ROLES[r].short})</option>`).join('')}
       </select>`}</td>
       ${ro ? '' : `<td><input type="number" min="0" max="4" value="${s.fouls || 0}" data-act="seat-fouls" data-seat="${s.seat}" class="fouls ${s.fouls >= 3 ? 'warnf' : ''}"></td>`}
+      ${!ro && imported ? `<td><label class="pick ${s.alive === 1 ? 'on-ok' : ''}"><input type="checkbox" data-act="seat-alive" data-seat="${s.seat}" ${s.alive === 1 ? 'checked' : ''}> alive</label></td>` : ''}
       <td class="fate">${alive ? '<span class="alive">alive at the end</span>' : fateText(f)}</td>
     </tr>`;
   }).join('');
@@ -317,14 +356,16 @@ function viewGame(id) {
     const nightAlive = [...tl.phases.find(p => p.round === n && p.phase === 'night').alive].sort((a, b) => a - b);
     const picks = (field, list) => list.map(s => {
       const on = (r[field] || []).includes(s);
-      return `<label class="pick ${on ? 'on' : ''} ${ro && !on ? 'hide-ro' : ''}"><input type="checkbox" data-act="pick-${field}" data-round="${i}" data-seat="${s}" ${on ? 'checked' : ''} ${dis}>${h(lbl(s))}</label>`;
+      return `<label class="pick ${on ? 'on' : ''}"><input type="checkbox" data-act="pick-${field}" data-round="${i}" data-seat="${s}" ${on ? 'checked' : ''} ${dis}>${h(lbl(s))}</label>`;
     }).join('');
+    // nominations may reference seats that are out (imported data) → offer all seats then
+    const nomSeats = imported ? g.seats.map(s => s.seat) : dayAlive;
     const noms = (r.nominations || []).map((nm, j) => ro
       ? `<div class="nom-row ro"><span class="nom-by">${nm.by ? h(lbl(nm.by)) : '—'}</span><span class="arrow">→</span><span class="nom-target">${h(lbl(nm.target))}</span><span class="nom-votes">${nm.votes ?? '–'} votes</span></div>`
       : `<div class="nom-row">
-          <select data-act="nom-by" data-round="${i}" data-idx="${j}">${seatOpts(dayAlive, nm.by, 'who')}</select>
+          <select data-act="nom-by" data-round="${i}" data-idx="${j}">${seatOpts(nomSeats, nm.by, 'who')}</select>
           <span class="arrow">→</span>
-          <select data-act="nom-target" data-round="${i}" data-idx="${j}">${seatOpts(dayAlive, nm.target, 'whom')}</select>
+          <select data-act="nom-target" data-round="${i}" data-idx="${j}">${seatOpts(nomSeats, nm.target, 'whom')}</select>
           <input type="number" min="0" max="20" value="${nm.votes ?? ''}" placeholder="votes" data-act="nom-votes" data-round="${i}" data-idx="${j}" class="votes-input">
           <button class="btn small ghost" data-act="nom-del" data-round="${i}" data-idx="${j}" title="Remove">✕</button>
         </div>`).join('');
@@ -371,7 +412,7 @@ function viewGame(id) {
       <div>
         <a href="#/games" class="back">← Games</a>
         <h1>Game #${g.number} <span class="muted">· ${fmtDate(g.date)}</span></h1>
-        <div class="row gap wrap">${winnerChip(g.winner)}${g.source === 'xls' ? '<span class="chip muted">imported from spreadsheet</span>' : ''}</div>
+        <div class="row gap wrap">${winnerChip(g.winner)}${imported ? '<span class="chip muted">imported from spreadsheet</span>' : ''}</div>
       </div>
       ${ro ? '' : `<div class="row gap wrap">
         <label class="field inline"><span>Date</span><input type="date" data-act="date" value="${g.date}"></label>
@@ -397,10 +438,11 @@ function viewGame(id) {
       ${warnings.length ? `<ul class="warnings">${warnings.map(w => `<li>${h(w)}</li>`).join('')}</ul>` : ''}
       <div class="table-wrap">
         <table class="seats">
-          <thead><tr><th>#</th><th>Player</th><th>Role</th>${ro ? '' : '<th>Fouls</th>'}<th>Status</th></tr></thead>
+          <thead><tr><th>#</th><th>Player</th><th>Role</th>${ro ? '' : '<th>Fouls</th>'}${!ro && imported ? '<th>End</th>' : ''}<th>Status</th></tr></thead>
           <tbody>${seatRows}</tbody>
         </table>
       </div>
+      ${!ro && imported ? '<p class="muted small">Imported game: there are no night notes, so "alive at the end" is set by hand.</p>' : ''}
     </section>
 
     <div class="section-head"><h2>Rounds</h2>${ro ? '' : '<span class="muted small">Each round = Day (nominations, vote-out) → Night (shots, checks, heal). Saves automatically.</span>'}</div>
@@ -424,21 +466,22 @@ function viewGame(id) {
   `;
   if (ro) return;
 
-  const commit = () => { Store.save(); viewGame(id); };
+  const commit = () => { Store.saveGame(g); viewGame(id); };
 
-  function handle(act, el) {
+  async function handle(act, el) {
     const seat = +el.dataset.seat, ri = +el.dataset.round, idx = +el.dataset.idx;
     const s = seat ? g.seats.find(x => x.seat === seat) : null;
     const r = Number.isInteger(ri) ? g.rounds[ri] : null;
     switch (act) {
       case 'seat-player': s.playerId = el.value || null; break;
       case 'seat-role': s.role = el.value || null; break;
+      case 'seat-alive': s.alive = el.checked ? 1 : 0; break;
       case 'seat-fouls': s.fouls = Math.max(0, Math.min(4, +el.value || 0)); if (s.fouls >= 4) toast('4 fouls — mark the player as removed in the current round'); break;
       case 'nom-add': r.nominations.push({ by: null, target: null, votes: null }); break;
       case 'nom-del': r.nominations.splice(idx, 1); break;
       case 'nom-by': r.nominations[idx].by = el.value ? +el.value : null; break;
       case 'nom-target': r.nominations[idx].target = el.value ? +el.value : null; break;
-      case 'nom-votes': r.nominations[idx].votes = el.value === '' ? null : +el.value; Store.save(); return;
+      case 'nom-votes': r.nominations[idx].votes = el.value === '' ? null : +el.value; Store.saveGame(g); return;
       case 'pick-eliminated':
       case 'pick-removed': {
         const field = act.slice(5);
@@ -480,21 +523,20 @@ function viewGame(id) {
       }
       case 'quick-add': {
         const inp = $('#qaName');
-        const p = Store.addPlayer(inp.value);
-        if (!p) { toast('Type a nickname first'); return; }
+        const p = await attempt(() => Store.addPlayer(inp.value));
+        if (!p) { if (!inp.value.trim()) toast('Type a nickname first'); return; }
         const free = g.seats.find(x => !x.playerId);
-        if (free && !g.seats.some(x => x.playerId === p.id)) { free.playerId = p.id; toast(`${p.nickname} → seat ${free.seat}`); }
+        if (free && !g.seats.some(x => x.playerId === p.id)) { free.playerId = p.id; toast(`${p.nickname} (No. ${p.number}) → seat ${free.seat}`); }
         else toast(`${p.nickname} added`);
         break;
       }
       case 'winner': g.winner = el.dataset.val || null; if (g.winner) toast('Result saved'); break;
-      case 'notes': g.notes = el.value; Store.save(); toast('Notes saved'); return;
+      case 'notes': g.notes = el.value; Store.saveGame(g); return;
       case 'date': if (el.value) g.date = el.value; break;
       case 'number': g.number = Math.max(1, +el.value || 1); break;
       case 'del-game':
         if (!confirm('Delete this game permanently?')) return;
-        Store.deleteGame(id);
-        location.hash = '#/games';
+        if (await attempt(() => Store.deleteGame(id).then(() => true))) location.hash = '#/games';
         return;
     }
     commit();
@@ -514,65 +556,129 @@ function viewPlayers() {
   const db = Store.get();
   const st = Stats.compute(db);
   const byId = Object.fromEntries(st.players.map(p => [p.id, p]));
-  const list = [...db.players].sort((a, b) => a.nickname.localeCompare(b.nickname));
   const edit = Store.canEdit();
+  const adminLive = Store.isAdmin();
+  const priv = adminLive ? Object.fromEntries(Store.adminData().players.map(p => [p.id, p])) : {};
+  const accounts = adminLive ? Store.adminData().accounts : [];
+  const tgFor = pid => accounts.filter(a => a.player_id === pid && a.provider === 'telegram');
 
+  const cols = [
+    { key: 'number', label: 'No.', get: p => p.number },
+    { key: 'nickname', label: 'Nickname', get: p => p.nickname.toLowerCase() },
+    { key: 'games', label: 'Games', get: p => (byId[p.id] || {}).games || 0 },
+    { key: 'wins', label: 'Wins', get: p => (byId[p.id] || {}).wins || 0 },
+    { key: 'rating', label: 'Rating', get: p => (byId[p.id] || {}).rating || 0 },
+    { key: 'last', label: 'Last played', get: p => (byId[p.id] || {}).lastPlayed || '' },
+  ];
+  const { key, dir } = UI.plSort;
+  const col = cols.find(c => c.key === key) || cols[0];
+  const list = [...db.players].sort((a, b) => { const va = col.get(a), vb = col.get(b); return va < vb ? -dir : va > vb ? dir : a.number - b.number; });
+
+  const row = p => {
+    const s = byId[p.id];
+    const pv = priv[p.id] || {};
+    const tg = tgFor(p.id);
+    if (UI.editingPlayer === p.id) {
+      const pre = tg.find(a => !a.linked) || tg[0];
+      return `<tr class="editing"><td class="muted">${p.number}</td><td colspan="${adminLive ? 8 : 6}">
+        <form class="edit-player row gap wrap" data-id="${p.id}">
+          <label class="field"><span>Nickname (public)</span><input name="nickname" value="${h(p.nickname)}" required></label>
+          ${adminLive ? `
+          <label class="field"><span>First name (private)</span><input name="first_name" value="${h(pv.first_name || '')}"></label>
+          <label class="field"><span>Last name (private)</span><input name="last_name" value="${h(pv.last_name || '')}"></label>
+          <label class="field"><span>Telegram @username</span><input name="telegram" value="${h(pre ? pre.username || '' : '')}" placeholder="@username"></label>` : ''}
+          <div class="row gap"><button class="btn primary small">Save</button><button type="button" class="btn ghost small" data-cancel>Cancel</button></div>
+        </form></td></tr>`;
+    }
+    return `<tr data-name="${h((p.nickname + ' ' + (pv.first_name || '') + ' ' + (pv.last_name || '') + ' ' + tg.map(a => a.username).join(' ')).toLowerCase())}">
+      <td class="muted">${p.number}</td>
+      <td><a href="#/player/${p.id}">${h(p.nickname)}</a></td>
+      ${adminLive ? `<td>${h([pv.first_name, pv.last_name].filter(Boolean).join(' ')) || '<span class="muted">—</span>'}</td>
+        <td>${tg.length ? tg.map(a => `<span class="chip ${a.linked ? 'win' : 'muted'}" title="${a.linked ? 'linked: has logged in' : 'waiting for first login'}">@${h(a.username || a.display_name || '?')}</span>`).join(' ') : '<span class="muted">—</span>'}</td>` : ''}
+      <td>${s ? s.games : 0}</td>
+      <td>${s ? s.wins : 0}</td>
+      <td>${s ? pct(s.rating) : '—'}</td>
+      <td>${s && s.lastPlayed ? fmtDate(s.lastPlayed) : '—'}</td>
+      ${edit ? `<td class="actions"><button class="btn small ghost" data-edit="${p.id}">Edit</button><button class="btn small ghost danger-text" data-del="${p.id}">Delete</button></td>` : ''}
+    </tr>`;
+  };
+
+  const loggedIn = accounts.filter(a => a.linked);
   $app.innerHTML = `
     <div class="page-head"><h1>Players <span class="muted">· ${list.length}</span></h1></div>
     ${edit ? `<section class="card">
       <form id="addForm" class="row gap wrap">
         <input name="nickname" placeholder="Nickname" required>
         <button class="btn primary">+ Add player</button>
+        <span class="muted small">New players get the next number (No. ${Math.max(0, ...db.players.map(p => p.number)) + 1}).</span>
       </form>
     </section>` : ''}
     <section class="card">
       <input id="filter" class="filter" placeholder="Search players…">
       <div class="table-wrap">
         <table class="players">
-          <thead><tr><th>Nickname</th><th>Games</th><th>Wins</th><th>Rating</th><th>Last played</th>${edit ? '<th></th>' : ''}</tr></thead>
-          <tbody>
-            ${list.map(p => { const s = byId[p.id]; return `
-              <tr data-name="${h(p.nickname.toLowerCase())}">
-                <td><a href="#/player/${p.id}">${h(p.nickname)}</a></td>
-                <td>${s ? s.games : 0}</td>
-                <td>${s ? s.wins : 0}</td>
-                <td>${s ? pct(s.rating) : '—'}</td>
-                <td>${s && s.lastPlayed ? fmtDate(s.lastPlayed) : '—'}</td>
-                ${edit ? `<td class="actions"><button class="btn small ghost" data-edit="${p.id}">Rename</button><button class="btn small ghost danger-text" data-del="${p.id}">Delete</button></td>` : ''}
-              </tr>`; }).join('') || '<tr><td colspan="6" class="muted">No players yet.</td></tr>'}
-          </tbody>
+          <thead><tr>
+            ${cols.slice(0, 2).map(c => `<th data-sort="${c.key}" class="sortable ${c.key === key ? 'sorted' : ''}">${c.label}${c.key === key ? (dir < 0 ? ' ↓' : ' ↑') : ''}</th>`).join('')}
+            ${adminLive ? '<th>Name</th><th>Telegram</th>' : ''}
+            ${cols.slice(2).map(c => `<th data-sort="${c.key}" class="sortable ${c.key === key ? 'sorted' : ''}">${c.label}${c.key === key ? (dir < 0 ? ' ↓' : ' ↑') : ''}</th>`).join('')}
+            ${edit ? '<th></th>' : ''}
+          </tr></thead>
+          <tbody>${list.map(row).join('') || '<tr><td colspan="9" class="muted">No players yet.</td></tr>'}</tbody>
         </table>
       </div>
+      ${adminLive ? '<p class="muted small">Name and Telegram are private (only you see them). If you add someone\'s Telegram @username, they are linked to this player automatically the first time they log in.</p>' : ''}
     </section>
+    ${adminLive ? `
+    <section class="card">
+      <h2>Telegram logins</h2>
+      <p class="muted small">Everyone who has logged in. Link an account to a player so they see "My stats"; make someone admin if they should help with data.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Telegram</th><th>Last login</th><th>Player</th><th>Role</th></tr></thead>
+        <tbody>${loggedIn.map(a => `<tr>
+          <td>${h(a.display_name || '')} ${a.username ? `<span class="muted">@${h(a.username)}</span>` : ''}</td>
+          <td class="muted">${a.last_login_at ? h(a.last_login_at.slice(0, 16)) : '—'}</td>
+          <td><select data-acc-player="${a.id}"><option value="">— not linked —</option>${[...db.players].sort((x, y) => x.nickname.localeCompare(y.nickname)).map(p => `<option value="${p.id}" ${a.player_id === p.id ? 'selected' : ''}>${h(p.nickname)}</option>`).join('')}</select></td>
+          <td><select data-acc-role="${a.id}"><option value="player" ${a.role === 'player' ? 'selected' : ''}>player</option><option value="admin" ${a.role === 'admin' ? 'selected' : ''}>admin</option></select></td>
+        </tr>`).join('') || '<tr><td colspan="4" class="muted">Nobody has logged in yet.</td></tr>'}</tbody>
+      </table></div>
+    </section>` : ''}
   `;
 
   $('#filter').oninput = e => {
     const q = e.target.value.trim().toLowerCase();
     $$('tbody tr[data-name]').forEach(tr => { tr.style.display = tr.dataset.name.includes(q) ? '' : 'none'; });
   };
+  $$('th[data-sort]').forEach(th => th.onclick = () => {
+    const k = th.dataset.sort;
+    UI.plSort = { key: k, dir: UI.plSort.key === k ? -UI.plSort.dir : (k === 'nickname' ? 1 : -1) };
+    viewPlayers();
+  });
   if (!edit) return;
   $('#addForm').onsubmit = e => {
     e.preventDefault();
-    const p = Store.addPlayer(e.target.nickname.value);
-    if (p) { toast(`${p.nickname} added`); viewPlayers(); $('#addForm input').focus(); }
+    attempt(async () => {
+      const p = await Store.addPlayer(e.target.nickname.value);
+      if (p) { toast(`${p.nickname} added as No. ${p.number}`); viewPlayers(); $('#addForm input').focus(); }
+    });
   };
-  $$('[data-edit]').forEach(b => b.onclick = () => renamePlayer(b.dataset.edit, viewPlayers));
+  $$('[data-edit]').forEach(b => b.onclick = () => { UI.editingPlayer = b.dataset.edit; viewPlayers(); });
+  $$('[data-cancel]').forEach(b => b.onclick = () => { UI.editingPlayer = null; viewPlayers(); });
+  $$('form.edit-player').forEach(f => f.onsubmit = e => {
+    e.preventDefault();
+    const patch = { nickname: f.nickname.value.trim() };
+    if (f.first_name) Object.assign(patch, { first_name: f.first_name.value, last_name: f.last_name.value, telegram: f.telegram.value });
+    attempt(async () => { await Store.updatePlayer(f.dataset.id, patch); UI.editingPlayer = null; toast('Saved'); viewPlayers(); });
+  });
   $$('[data-del]').forEach(b => b.onclick = () => {
     const p = Store.player(b.dataset.del);
-    if (Store.playerInUse(p.id)) { toast(`${p.nickname} has played games — rename instead`); return; }
-    if (confirm(`Delete ${p.nickname}?`)) { Store.deletePlayer(p.id); viewPlayers(); }
+    if (Store.playerInUse(p.id)) { toast(`${p.nickname} has played games — edit instead`); return; }
+    if (confirm(`Delete ${p.nickname}?`)) attempt(async () => { await Store.deletePlayer(p.id); viewPlayers(); });
   });
+  $$('[data-acc-player]').forEach(s => s.onchange = () => attempt(async () => { await Store.updateAccount(s.dataset.accPlayer, { player_id: s.value || null }); toast('Saved'); viewPlayers(); }));
+  $$('[data-acc-role]').forEach(s => s.onchange = () => attempt(async () => { await Store.updateAccount(s.dataset.accRole, { role: s.value }); toast('Saved'); viewPlayers(); }));
 }
 
-function renamePlayer(id, after) {
-  const p = Store.player(id);
-  const nickname = prompt('Nickname', p.nickname);
-  if (nickname === null || !nickname.trim()) return;
-  Store.updatePlayer(id, { nickname: nickname.trim() });
-  after();
-}
-
-/* ---------- player profile (future "my stats" page) ---------- */
+/* ---------- player profile ("My stats") ---------- */
 function viewPlayer(id) {
   const p0 = Store.player(id);
   if (!p0) { $app.innerHTML = `<div class="empty">Player not found. <a href="#/players">Back</a></div>`; return; }
@@ -580,18 +686,14 @@ function viewPlayer(id) {
   const p = st.players.find(x => x.id === p0.id);
   const ranked = [...st.players].sort((a, b) => b.rating - a.rating);
   const rank = ranked.findIndex(x => x.id === p0.id) + 1;
+  const mine = Store.user() && Store.user().playerId === p0.id;
 
   const head = `
     <div class="page-head">
-      <div><a href="#/players" class="back">← Players</a><h1>${h(p0.nickname)}</h1></div>
-      ${Store.canEdit() ? '<button class="btn ghost" id="editBtn">Rename</button>' : ''}
+      <div><a href="#/players" class="back">← Players</a><h1>${h(p0.nickname)} <span class="muted">No. ${p0.number}</span>${mine ? ' <span class="chip win">you</span>' : ''}</h1></div>
     </div>`;
 
-  if (!p) {
-    $app.innerHTML = head + `<div class="empty">No finished games yet for ${h(p0.nickname)}.</div>`;
-    if ($('#editBtn')) $('#editBtn').onclick = () => renamePlayer(p0.id, () => viewPlayer(p0.id));
-    return;
-  }
+  if (!p) { $app.innerHTML = head + `<div class="empty">No finished games yet for ${h(p0.nickname)}.</div>`; return; }
 
   const facts = [
     ['Alive at the end', `${p.survived} (${pct(p.survived / p.games)})`],
@@ -650,14 +752,13 @@ function viewPlayer(id) {
       </div>
     </section>
   `;
-  if ($('#editBtn')) $('#editBtn').onclick = () => renamePlayer(p0.id, () => viewPlayer(p0.id));
 }
 
 /* ============================================================
-   DATA: backup / import / CSV / settings
+   DATA: backup / import / CSV
    ============================================================ */
 function toCSV(db, sep) {
-  const cols = ['date', 'game_no', 'game_id', 'seat', 'player', 'role', 'team', 'winner', 'won', 'alive_end', 'fate', 'fate_round', 'fouls'];
+  const cols = ['date', 'game_no', 'game_id', 'seat', 'player_no', 'player', 'role', 'team', 'winner', 'won', 'alive_end', 'fate', 'fate_round', 'fouls'];
   const esc = v => { v = String(v ?? ''); return /["\n\r;,]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; };
   const rows = [cols.join(sep)];
   [...db.games].sort((a, b) => a.date.localeCompare(b.date) || a.number - b.number).forEach(g => {
@@ -666,7 +767,8 @@ function toCSV(db, sep) {
       const alive = tl.alive.includes(s.seat);
       const f = alive ? null : tl.fates[s.seat];
       const team = s.role ? ROLES[s.role].team : '';
-      rows.push([g.date, g.number, g.id, s.seat, Store.playerName(s.playerId), s.role || '', team, g.winner || '',
+      const p = Store.player(s.playerId) || {};
+      rows.push([g.date, g.number, g.id, s.seat, p.number || '', p.nickname || '', s.role || '', team, g.winner || '',
         g.winner && team ? (team === g.winner ? 1 : 0) : '', alive ? 1 : 0, f ? f.type : '', f && f.round ? f.round : '', s.fouls || 0].map(esc).join(sep));
     });
   });
@@ -675,20 +777,22 @@ function toCSV(db, sep) {
 
 function viewData() {
   const db = Store.get();
-  const s = db.settings;
   const live = Store.isLive();
+  const stamp = localToday();
   $app.innerHTML = `
     <div class="page-head"><h1>Data</h1></div>
-    ${live ? `<div class="callout">You are on the <b>live site</b>: data comes from the database. Editing will be available to the admin after Telegram login is added.</div>`
+    ${live ? `<div class="callout">Live site: data comes from the database${Store.isAdmin() ? ' — you are admin, so you can edit games and players and download a full backup.' : '. Downloads contain public data only (nicknames).'}</div>`
            : `<div class="callout">Local mode: data is stored <b>in this browser only</b>. Download a backup after every game night.</div>`}
     <div class="grid-2">
       <section class="card">
         <h2>Backup</h2>
         <p class="muted small">${db.players.length} players · ${db.games.length} games</p>
         <div class="row gap wrap">
-          <button class="btn primary" id="exportJson">⬇ Download JSON</button>
+          ${Store.isAdmin() ? '<a class="btn primary" href="/api/admin/backup">⬇ Full backup (private, JSON)</a>' : ''}
+          <button class="btn ${Store.isAdmin() ? '' : 'primary'}" id="exportJson">⬇ Public data (JSON)</button>
           ${live ? '' : '<label class="btn">⬆ Restore from backup<input type="file" id="importJson" accept=".json,application/json" hidden></label>'}
         </div>
+        ${Store.isAdmin() ? '<p class="muted small">The full backup includes private names and Telegram accounts. Keep it in your private <code>data</code> folder.</p>' : ''}
       </section>
       <section class="card">
         <h2>Export for Excel</h2>
@@ -697,15 +801,6 @@ function viewData() {
           <button class="btn" id="csvSemi">CSV for Excel (EU, “;”)</button>
           <button class="btn ghost" id="csvComma">CSV (“,”)</button>
         </div>
-      </section>
-      <section class="card">
-        <h2>Settings</h2>
-        <form id="settings" class="settings">
-          <label class="field"><span>Confidence weight K for ratings (higher = more games needed to stand out)</span><input type="number" min="0" max="50" name="priorWeight" value="${s.priorWeight}"></label>
-          <label class="field"><span>Min games for “King of the Game”</span><input type="number" min="1" name="minGames" value="${s.minGames}"></label>
-          ${live ? '' : `<label class="field"><span>Default seats in a new game</span><input type="number" min="6" max="16" name="defaultSeats" value="${s.defaultSeats}"></label>`}
-        </form>
-        ${live ? '<p class="muted small">On the live site these settings only change your own view.</p>' : ''}
       </section>
       ${live ? '' : `<section class="card">
         <h2>Demo & reset</h2>
@@ -717,18 +812,9 @@ function viewData() {
     </div>
   `;
 
-  const stamp = localToday();
-  $('#exportJson').onclick = () => download(`mafia-bcn-${live ? 'live' : 'local'}-${stamp}.json`, JSON.stringify(Store.get(), null, 2), 'application/json');
+  $('#exportJson').onclick = () => download(`mafia-bcn-${live ? 'public' : 'local'}-${stamp}.json`, JSON.stringify(Store.get(), null, 2), 'application/json');
   $('#csvSemi').onclick = () => download(`mafia-bcn-${stamp}.csv`, toCSV(Store.get(), ';'), 'text/csv;charset=utf-8');
   $('#csvComma').onclick = () => download(`mafia-bcn-${stamp}.csv`, toCSV(Store.get(), ','), 'text/csv;charset=utf-8');
-  $('#settings').onchange = e => {
-    const f = e.currentTarget;
-    db.settings.priorWeight = Math.max(0, +f.priorWeight.value || 0);
-    db.settings.minGames = Math.max(1, +f.minGames.value || 3);
-    if (f.defaultSeats) db.settings.defaultSeats = Math.min(16, Math.max(6, +f.defaultSeats.value || 10));
-    Store.save();
-    toast('Settings saved');
-  };
   if (live) return;
   $('#importJson').onchange = e => {
     const file = e.target.files[0];
@@ -753,6 +839,49 @@ function viewData() {
     Store.clear();
     toast('All data cleared');
     route();
+  };
+}
+
+/* ============================================================
+   SETTINGS — rating rules (group-wide on the live site, admin edits)
+   ============================================================ */
+function viewSettings() {
+  const db = Store.get();
+  const s = db.settings;
+  const edit = Store.canEdit();
+  const dis = edit ? '' : 'disabled';
+  const st = Stats.compute(db);
+  $app.innerHTML = `
+    <div class="page-head"><h1>Settings</h1></div>
+    <div class="grid-2">
+      <section class="card">
+        <h2>Rating rules</h2>
+        <form id="settings" class="settings">
+          <label class="field"><span>Confidence weight K — how many “average games” every player starts with</span><input type="number" min="0" max="50" name="priorWeight" value="${s.priorWeight}" ${dis}></label>
+          <label class="field"><span>Minimum games for “King of the Game”</span><input type="number" min="1" max="50" name="minGames" value="${s.minGames}" ${dis}></label>
+          <label class="field"><span>Seats in a new game</span><input type="number" min="6" max="16" name="defaultSeats" value="${s.defaultSeats}" ${dis}></label>
+          ${edit ? '' : '<p class="muted small">Only the admin can change these.</p>'}
+        </form>
+      </section>
+      <section class="card">
+        <h2>How ratings work</h2>
+        <p><b>Rating</b> = (wins + K × average) ÷ (games + K)</p>
+        <p class="muted">Now: K = ${st.K}, average win rate per seat = ${pct(st.overallRate)}. A new player starts at the average; every game moves the rating towards their real win rate. So 8 wins of 10 games ranks higher than 2 of 2.</p>
+        <p><b>Role rating</b> — same formula, but with that role's own average:</p>
+        <p class="muted">${ROLE_ORDER.map(r => `${ROLES[r].label} ${pct(st.baseline[r])}`).join(' · ')}</p>
+        <p><b>± exp.</b> — wins minus the wins expected from the roles a player received (mafia wins less often, so a mafia win counts for more).</p>
+      </section>
+    </div>
+  `;
+  if (!edit) return;
+  $('#settings').onchange = e => {
+    const f = e.currentTarget;
+    const patch = {
+      priorWeight: Math.max(0, Math.min(50, +f.priorWeight.value || 0)),
+      minGames: Math.max(1, Math.min(50, +f.minGames.value || 3)),
+      defaultSeats: Math.min(16, Math.max(6, +f.defaultSeats.value || 10)),
+    };
+    attempt(async () => { await Store.saveSettings(patch); toast('Settings saved'); viewSettings(); });
   };
 }
 
