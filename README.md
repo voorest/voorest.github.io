@@ -1,69 +1,63 @@
 # Mafia BCN — Game Log
 
-A small website for recording our weekend Mafia games in Barcelona and building stats from them:
-leaderboard, attendance, role stats and titles (King of the Game, Best Sheriff / Don / Mafia / Citizen, Best Role Player…).
+Games, stats and titles for our weekend Mafia games in Barcelona.
 
-## How to use it (today)
+**Live site:** https://mafia-bcn.voorest.workers.dev (Cloudflare: website + API + D1 database)
 
-1. Double-click `index.html` and it opens in your browser. No install, no server.
-2. **Players**: add everyone (name + optional Telegram @nick).
-3. **Games → New game**: pick players for seats 1–10, set roles (or press 🎲 Random roles).
-4. During the game, add rounds. Each round is **Day** (who voted for whom, who was voted out) then **Night** (mafia shot, Don check, Sheriff check).
-5. At the end, set the winner. The **Dashboard** updates right away.
-6. **Data → Download backup** after every game night. Save the file into the `data/` folder.
-
-> ⚠️ For now, data lives in your browser's storage. If you clear browser data or switch browsers, restore from your latest backup.
-
-## Project structure
+## How it fits together
 
 ```
-index.html        page shell + navigation
-css/style.css     all styling
-js/data.js        data layer (storage, players, games) + game rules (who's alive, winner)
-js/stats.js       statistics & titles (pure functions)
-js/app.js         screens: dashboard, games, game editor, players, player page, data
-js/demo.js        random demo data generator
-data/             your JSON backups (ignored by git by default; see .gitignore)
+GitHub (this repo)  ──push to master──▶  Cloudflare Workers Builds  ──deploys──▶  mafia-bcn.voorest.workers.dev
+                                                                                        │
+                                                                     Cloudflare D1 database "mafia-bcn"
 ```
 
-## Data model (v1)
+- `public/`: the website (plain HTML/CSS/JS, no build step)
+- `src/worker.js`: the Cloudflare Worker. It serves `public/` and the API (`GET /api/data`)
+- `migrations/`: database schema (SQL)
+- `scripts/import_xls.py`: one-off import of the old spreadsheet
+- `data/`: **private** files (spreadsheets, backups, generated SQL). They're ignored by git, so they never reach this public repo.
+- `wrangler.jsonc`: Cloudflare config (Worker name, database binding)
 
-```jsonc
-{
-  "players": [{ "id": "…", "name": "Alex", "nick": "@alex" }],
-  "games": [{
-    "id": "…", "date": "2026-10-04", "number": 1, "winner": "town" | "mafia" | null,
-    "seats":  [{ "seat": 1, "playerId": "…", "role": "citizen|sheriff|mafia|don", "fouls": 0 }],
-    "rounds": [{
-      "day":   { "votes": { "1": 3, "2": 3 }, "eliminated": [3], "removed": [] },
-      "night": { "kill": 5, "donCheck": 2, "sheriffCheck": 6 }
-    }],
-    "notes": ""
-  }],
-  "settings": { "minGames": 3, "minRoleGames": 2, "defaultSeats": 10 }
-}
-```
+The website has two modes:
+- **Live** (on Cloudflare): reads from the database. Read-only until the admin login is added.
+- **Local** (opening `public/index.html` directly, or on GitHub Pages): data stays in your browser. You can edit it, and it has a demo data button.
 
-## Publish on GitHub (and GitHub Pages)
+## Branches and deploys
+
+- `master` = production. Every push to `master` deploys automatically.
+- `dev` = work in progress. Do the work here, then merge into `master` when it's ready.
 
 ```bash
-cd D:\_projects\mafia_games
-git init
-git add .
-git commit -m "First version of Mafia BCN game log"
-git branch -M main
-git remote add origin https://github.com/<your-user>/mafia-games.git
-git push -u origin main
+git checkout dev        # work here
+git push origin dev     # does NOT deploy
+git checkout master && git merge dev && git push   # deploys
 ```
-Then on GitHub, go to **Settings → Pages → Deploy from branch → main / root**, and the site is live at `https://<your-user>.github.io/mafia-games/`.
 
-Note that GitHub Pages on a free account requires a **public** repository. Each visitor's browser has its own storage, so the public site starts empty. Shared data comes with the database step (Supabase) on the roadmap.
+## Database
 
-## Roadmap (draft)
+Tables: `players` (public nickname + private names), `accounts` (Telegram/Google logins linked to a player),
+`games`, `game_seats` (seat, player, role, alive at end), `nominations` (who → whom, votes),
+`round_events` (voted out, removed, mafia/maniac shot, don/sheriff check, doctor heal).
 
-- [x] v0: local-first site: record games, dashboard, titles, JSON/CSV export
-- [ ] Analyse the existing XLS and import its history
-- [ ] Agree on scoring rules (points, extra points, best move, etc.)
-- [ ] Move data to Supabase (Postgres) with admin login; the public dashboard reads from it
-- [ ] Personal player pages (login via Telegram)
-- [ ] Telegram bot: announce games, sign-ups, post results
+Roles: citizen, sheriff, doctor, maniac (all on the citizens' team), mafia, don.
+
+## Ratings (fair comparison)
+
+```
+rating = (wins + K × average win rate) / (games + K)       K = 5 by default
+```
+A player with few games stays close to the average, and the more they play, the more their own results count.
+Role ratings use the same formula with each role's own average. "± exp." = wins minus the wins you'd
+expect from the roles a player got (mafia wins less often than citizens in our group).
+
+## Roadmap
+
+- [x] Local prototype
+- [x] Cloudflare Worker + D1 database, spreadsheet imported (14 games, 26 players)
+- [x] Game model matching the paper notes (nominations, night actions, doctor, maniac)
+- [ ] Telegram login (@mafia_bcn_bot), admin role
+- [ ] Admin: add/edit games, players and nicknames from the website
+- [ ] Linking players to Telegram accounts (admin sets it; optional "that's me" request)
+- [ ] Personal "my stats" page
+- [ ] Automatic JSON backups, announcements, notifications

@@ -275,3 +275,31 @@ details summary { cursor: pointer; color: var(--muted); font-size: .85rem; margi
   .votes { grid-template-columns: 1fr; }
   .bar-row { grid-template-columns: 90px 1fr auto; }
 }
+
+/* ---------- v2: nominations, nights, live mode ---------- */
+.demo-banner.subtle { background: var(--surface-2); color: var(--muted); border-bottom: 1px solid var(--border); }
+.noms { display: flex; flex-direction: column; gap: .35rem; margin-bottom: .5rem; }
+.nom-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) 5rem auto; gap: .4rem; align-items: center; max-width: 640px; }
+.nom-row select { width: 100%; }
+.nom-row.ro { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; font-size: .92rem; }
+.nom-row .arrow { color: var(--muted); }
+.nom-votes { color: var(--muted); font-variant-numeric: tabular-nums; }
+.votes-input { width: 100%; }
+.night-ro { font-size: .92rem; }
+.night-ro .lbl { color: var(--muted); }
+.hide-ro { display: none; }
+td.pos, .kpi-val.pos { color: var(--ok); }
+td.neg, .kpi-val.neg { color: var(--danger); }
+.notes { white-space: pre-wrap; color: var(--muted); }
+@media (max-width: 640px) {
+  .nom-row { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+  .nom-row .votes-input { grid-column: 1 / 2; }
+}
+:root { --doctor: #4fb57d; --maniac: #e8894a; }
+.chip.role-doctor { color: var(--doctor); border-color: rgba(79, 181, 125, .45); background: rgba(79, 181, 125, .08); }
+.chip.role-maniac { color: var(--maniac); border-color: rgba(232, 137, 74, .45); background: rgba(232, 137, 74, .08); }
+.bar.role-doctor > span { background: var(--doctor); }
+.bar.role-maniac > span { background: var(--maniac); }
+.role-select.role-doctor { color: var(--doctor); }
+.role-select.role-maniac { color: var(--maniac); }
+.nom-row.ro { max-width: 520px; }

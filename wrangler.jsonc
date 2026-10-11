@@ -1,0 +1,20 @@
+{
+  // Cloudflare Worker config. The Worker name must match the project name in Cloudflare.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mafia-bcn",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-06-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mafia-bcn",
+      "database_id": "44855031-78d6-4d0d-bd39-7e3d144a5f23",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "observability": { "enabled": true }
+}
