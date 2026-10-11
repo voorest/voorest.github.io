@@ -1,5 +1,5 @@
-# Personal data backups: player names stay out of a public repo
-data/*.json
+# Private data (backups, spreadsheets with real names) never goes into this public repo
+data/*
 !data/.gitkeep
 
 # OS / editor junk
@@ -7,3 +7,5 @@ data/*.json
 Thumbs.db
 .vscode/
 node_modules/
+.wrangler/
+.dev.vars
