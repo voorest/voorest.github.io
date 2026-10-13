@@ -38,19 +38,7 @@ function makeDemoData() {
       };
       for (let r = 1; r <= 9 && !winner; r++) {
         const round = GameLogic.emptyRound();
-        const mafiaAlive = alive.filter(s => team(s) === 'mafia');
-        const nominators = shuffle(alive).slice(0, 2 + Math.floor(Math.random() * 3));
-        nominators.forEach(by => {
-          const target = team(by) === 'town' && Math.random() < 0.55 ? rnd(mafiaAlive) : rnd(alive.filter(x => x !== by));
-          round.nominations.push({ by, target, votes: Math.floor(Math.random() * (alive.length / 2 + 1)) });
-        });
-        const top = [...round.nominations].sort((a, b) => b.votes - a.votes)[0];
-        if (top && top.votes > 0 && !(r === 1 && Math.random() < 0.3)) {
-          round.eliminated = [top.target];
-          alive = alive.filter(x => x !== top.target);
-        }
-        winner = check();
-        if (winner) { rounds.push(round); break; }
+        // Night first
         const town = alive.filter(s => team(s) === 'town');
         const nt = round.night;
         nt.mafiaKill = Math.random() > 0.1 ? rnd(town) : null;
@@ -59,6 +47,20 @@ function makeDemoData() {
         const doc = alive.find(s => role(s) === 'doctor'); if (doc) nt.doctorHeal = rnd(alive);
         const man = alive.find(s => role(s) === 'maniac'); if (man && Math.random() < 0.6) nt.maniacKill = rnd(alive.filter(x => x !== man));
         GameLogic.nightDeaths(nt).forEach(d => { alive = alive.filter(x => x !== d.seat); });
+        winner = check();
+        if (winner) { rounds.push(round); break; }
+        // Then the day
+        const mafiaAlive = alive.filter(s => team(s) === 'mafia');
+        const nominators = shuffle(alive).slice(0, 2 + Math.floor(Math.random() * 3));
+        nominators.forEach(by => {
+          const target = team(by) === 'town' && Math.random() < 0.55 && mafiaAlive.length ? rnd(mafiaAlive) : rnd(alive.filter(x => x !== by));
+          round.nominations.push({ by, target, votes: Math.floor(Math.random() * (alive.length / 2 + 1)) });
+        });
+        const top = [...round.nominations].sort((a, b) => b.votes - a.votes)[0];
+        if (top && top.votes > 0) {
+          round.eliminated = [top.target];
+          alive = alive.filter(x => x !== top.target);
+        }
         rounds.push(round);
         winner = check();
       }

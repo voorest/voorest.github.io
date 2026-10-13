@@ -322,3 +322,12 @@ tr.editing td { background: var(--surface-2); }
   .topbar { flex-wrap: wrap; row-gap: .4rem; }
   .topbar nav { order: 3; width: 100%; }
 }
+
+/* ---------- v4: unsaved changes bar ---------- */
+.savebar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: rgba(23, 25, 28, .97); border-top: 2px solid var(--warn); box-shadow: 0 -6px 24px rgba(0, 0, 0, .4); }
+.savebar-inner { max-width: 1180px; margin: 0 auto; padding: .7rem 16px; display: flex; align-items: center; gap: .7rem; flex-wrap: wrap; }
+.savebar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 4px rgba(231, 162, 59, .2); }
+.savebar .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60vw; }
+.savebar .spacer { flex: 1; }
+body:has(.savebar) main { padding-bottom: 7rem; }
+body:has(.savebar) #toast { bottom: 84px; }

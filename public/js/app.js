@@ -53,6 +53,24 @@ function download(filename, text, type) {
   a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
+/** Save a text file. Chrome/Edge: a "Save as" window that remembers your folder (e.g. mafia_games\\data). Others: normal download. */
+async function saveFile(filename, text) {
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({ id: 'mafia-backups', suggestedName: filename, types: [{ description: 'JSON backup', accept: { 'application/json': ['.json'] } }] });
+      const w = await handle.createWritable();
+      await w.write(text);
+      await w.close();
+      toast('Backup saved');
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      console.warn(e);
+    }
+  }
+  download(filename, text, 'application/json');
+}
+
 function loadDemo() {
   const db = Store.get();
   if ((db.players.length || db.games.length) && !confirm('Replace ALL current data with demo data?')) return;
@@ -100,7 +118,7 @@ function route() {
       ? `<div class="demo-banner">Local mode with <b>demo data</b>. Real data lives on the live site.</div>`
       : `<div class="demo-banner subtle">Local mode — data is stored in this browser only.</div>`;
   } else if (Store.isAdmin()) {
-    banner = `<div class="demo-banner subtle">Admin mode — your changes are saved to the database immediately.</div>`;
+    banner = `<div class="demo-banner subtle">Admin mode — game changes are stored only when you press <b>Save changes</b>.</div>`;
   }
   document.getElementById('banner').innerHTML = banner;
   renderAuth();
@@ -112,7 +130,23 @@ function route() {
   };
   (views[view] || viewDashboard)();
 }
-window.addEventListener('hashchange', () => { route(); window.scrollTo(0, 0); });
+let currentHash = location.hash;
+window.addEventListener('hashchange', () => {
+  if (UI.skipHash) { UI.skipHash = false; return; }
+  const stillHere = UI.draft && location.hash === '#/game/' + UI.draft.id;
+  if (!stillHere && gameDirty()) {
+    if (!confirm('You have unsaved changes in this game. Leave without saving?')) {
+      UI.skipHash = true;
+      location.hash = currentHash;
+      return;
+    }
+  }
+  if (!stillHere) { UI.draft = null; renderSaveBar(); }
+  currentHash = location.hash;
+  route();
+  window.scrollTo(0, 0);
+});
+window.addEventListener('beforeunload', e => { if (gameDirty()) { e.preventDefault(); e.returnValue = ''; } });
 
 /* ============================================================
    DASHBOARD
@@ -262,6 +296,7 @@ function gameRow(g) {
   return `<a class="game-row" href="#/game/${g.id}">
     <span class="gnum">#${g.number}</span>
     <span class="gdate">${fmtDate(g.date)}</span>
+    <span class="muted small">overall #${Store.overallNumber(g)}</span>
     <span class="muted">${filled} players · ${g.rounds.length} round${g.rounds.length === 1 ? '' : 's'}</span>
     <span class="spacer"></span>
     ${winnerChip(g.winner)}
@@ -302,9 +337,12 @@ function viewGames() {
    GAME SCREEN — editor for the admin (and in local mode), read-only otherwise
    ============================================================ */
 function viewGame(id) {
-  const g = Store.game(id);
-  if (!g) { $app.innerHTML = `<div class="empty">Game not found. <a href="#/games">Back to games</a></div>`; return; }
+  const orig = Store.game(id);
+  if (!orig) { $app.innerHTML = `<div class="empty">Game not found. <a href="#/games">Back to games</a></div>`; return; }
   const ro = !Store.canEdit();
+  // Editing works on a draft copy; nothing is stored until "Save changes".
+  if (!ro && (!UI.draft || UI.draft.id !== orig.id)) UI.draft = { id: orig.id, g: JSON.parse(JSON.stringify(orig)), base: JSON.stringify(orig) };
+  const g = ro ? orig : UI.draft.g;
   const dis = ro ? 'disabled' : '';
   const db = Store.get();
   const imported = g.source === 'xls';
@@ -392,6 +430,10 @@ function viewGame(id) {
           <h3>Round ${n}</h3>
           ${!ro && i === g.rounds.length - 1 ? `<button class="btn small ghost" data-act="del-round" data-round="${i}">Remove round</button>` : ''}
         </div>
+        ${ro && !nightHtml.trim() ? '' : `<div class="phase night">
+          <h4>☾ Night ${n}</h4>
+          <div class="night-grid">${nightHtml || '<span class="muted small">No night notes</span>'}</div>
+        </div>`}
         <div class="phase day">
           <h4>☀ Day ${n} — nominations</h4>
           <div class="noms">${noms || '<span class="muted small">No nominations recorded</span>'}</div>
@@ -400,10 +442,6 @@ function viewGame(id) {
           ${ro ? ((r.removed || []).length ? `<div class="picks"><span class="lbl">Removed for fouls:</span>${r.removed.map(s => `<span class="chip warn">${h(lbl(s))}</span>`).join(' ')}</div>` : '')
                : `<details ${(r.removed || []).length ? 'open' : ''}><summary>Removed for fouls</summary><div class="picks">${picks('removed', dayAlive)}</div></details>`}
         </div>
-        ${ro && !nightHtml.trim() ? '' : `<div class="phase night">
-          <h4>☾ Night ${n}</h4>
-          <div class="night-grid">${nightHtml || '<span class="muted small">No night notes</span>'}</div>
-        </div>`}
       </div>`;
   }).join('');
 
@@ -411,7 +449,7 @@ function viewGame(id) {
     <div class="page-head">
       <div>
         <a href="#/games" class="back">← Games</a>
-        <h1>Game #${g.number} <span class="muted">· ${fmtDate(g.date)}</span></h1>
+        <h1>Game #${g.number} <span class="muted">· ${fmtDate(g.date)} · overall #${Store.overallNumber(orig)}</span></h1>
         <div class="row gap wrap">${winnerChip(g.winner)}${imported ? '<span class="chip muted">imported from spreadsheet</span>' : ''}</div>
       </div>
       ${ro ? '' : `<div class="row gap wrap">
@@ -445,7 +483,7 @@ function viewGame(id) {
       ${!ro && imported ? '<p class="muted small">Imported game: there are no night notes, so "alive at the end" is set by hand.</p>' : ''}
     </section>
 
-    <div class="section-head"><h2>Rounds</h2>${ro ? '' : '<span class="muted small">Each round = Day (nominations, vote-out) → Night (shots, checks, heal). Saves automatically.</span>'}</div>
+    <div class="section-head"><h2>Rounds</h2>${ro ? '' : '<span class="muted small">Each round = Night (shots, checks, heal) → Day (nominations, vote-out). Nothing is saved until you press <b>Save changes</b>.</span>'}</div>
     ${roundsHtml || '<div class="card muted">No rounds recorded.</div>'}
     ${ro ? '' : `<button class="btn primary add-round" data-act="add-round">+ Add round ${g.rounds.length + 1}</button>`}
 
@@ -465,8 +503,9 @@ function viewGame(id) {
     </section>
   `;
   if (ro) return;
+  renderSaveBar();
 
-  const commit = () => { Store.saveGame(g); viewGame(id); };
+  const commit = () => viewGame(id);
 
   async function handle(act, el) {
     const seat = +el.dataset.seat, ri = +el.dataset.round, idx = +el.dataset.idx;
@@ -481,7 +520,7 @@ function viewGame(id) {
       case 'nom-del': r.nominations.splice(idx, 1); break;
       case 'nom-by': r.nominations[idx].by = el.value ? +el.value : null; break;
       case 'nom-target': r.nominations[idx].target = el.value ? +el.value : null; break;
-      case 'nom-votes': r.nominations[idx].votes = el.value === '' ? null : +el.value; Store.saveGame(g); return;
+      case 'nom-votes': r.nominations[idx].votes = el.value === '' ? null : +el.value; renderSaveBar(); return;
       case 'pick-eliminated':
       case 'pick-removed': {
         const field = act.slice(5);
@@ -531,12 +570,12 @@ function viewGame(id) {
         break;
       }
       case 'winner': g.winner = el.dataset.val || null; if (g.winner) toast('Result saved'); break;
-      case 'notes': g.notes = el.value; Store.saveGame(g); return;
+      case 'notes': g.notes = el.value; renderSaveBar(); return;
       case 'date': if (el.value) g.date = el.value; break;
       case 'number': g.number = Math.max(1, +el.value || 1); break;
       case 'del-game':
         if (!confirm('Delete this game permanently?')) return;
-        if (await attempt(() => Store.deleteGame(id).then(() => true))) location.hash = '#/games';
+        if (await attempt(() => Store.deleteGame(id).then(() => true))) { UI.draft = null; location.hash = '#/games'; }
         return;
     }
     commit();
@@ -547,6 +586,75 @@ function viewGame(id) {
     el.addEventListener(evt, () => handle(el.dataset.act, el));
   });
   $('#qaName').addEventListener('keydown', e => { if (e.key === 'Enter') handle('quick-add', e.target); });
+  $$('textarea[data-act="notes"], input[data-act="nom-votes"]').forEach(el => el.addEventListener('input', () => handle(el.dataset.act, el)));
+}
+
+/* ---------- unsaved changes: bar, summary, save/discard ---------- */
+function gameDirty() { return !!(UI.draft && JSON.stringify(UI.draft.g) !== UI.draft.base); }
+
+function changeSummary(base, g) {
+  const out = [];
+  const label = w => (w ? TEAM_LABEL[w] + ' won' : 'not finished');
+  if (base.date !== g.date) out.push(`Date: ${base.date} → ${g.date}`);
+  if (base.number !== g.number) out.push(`Game #: ${base.number} → ${g.number}`);
+  if (base.winner !== g.winner) out.push(`Result: ${label(base.winner)} → ${label(g.winner)}`);
+  if ((base.notes || '') !== (g.notes || '')) out.push('Notes changed');
+  if (base.seats.length !== g.seats.length) out.push(`Seats: ${base.seats.length} → ${g.seats.length}`);
+  g.seats.forEach(s => {
+    const b = base.seats.find(x => x.seat === s.seat);
+    if (!b) return;
+    if (b.playerId !== s.playerId) out.push(`Seat ${s.seat}: ${b.playerId ? Store.playerName(b.playerId) : '—'} → ${s.playerId ? Store.playerName(s.playerId) : '—'}`);
+    if (b.role !== s.role) out.push(`Seat ${s.seat}: role ${b.role ? ROLES[b.role].label : '—'} → ${s.role ? ROLES[s.role].label : '—'}`);
+    if (b.alive !== s.alive && g.source === 'xls') out.push(`Seat ${s.seat}: ${s.alive ? 'alive' : 'out'} at the end`);
+    if ((b.fouls || 0) !== (s.fouls || 0)) out.push(`Seat ${s.seat}: fouls ${b.fouls || 0} → ${s.fouls || 0}`);
+  });
+  if (base.rounds.length !== g.rounds.length) out.push(`Rounds: ${base.rounds.length} → ${g.rounds.length}`);
+  g.rounds.forEach((r, i) => {
+    const b = base.rounds[i];
+    if (!b) return;
+    if (JSON.stringify(b.night) !== JSON.stringify(r.night)) out.push(`Round ${i + 1}: night changed`);
+    if (JSON.stringify([b.nominations, b.eliminated, b.removed]) !== JSON.stringify([r.nominations, r.eliminated, r.removed])) out.push(`Round ${i + 1}: day changed`);
+  });
+  return out;
+}
+
+function renderSaveBar() {
+  let bar = document.getElementById('savebar');
+  if (!gameDirty()) { if (bar) bar.remove(); return; }
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'savebar';
+    bar.className = 'savebar';
+    document.body.appendChild(bar);
+  }
+  const changes = changeSummary(JSON.parse(UI.draft.base), UI.draft.g);
+  bar.innerHTML = `<div class="savebar-inner">
+      <span class="dot"></span><b>Unsaved changes</b><span class="muted small">${changes.length} change${changes.length === 1 ? '' : 's'}: ${h(changes.slice(0, 3).join(' · '))}${changes.length > 3 ? ' …' : ''}</span>
+      <span class="spacer"></span>
+      <button class="btn ghost small" id="discardBtn">Discard</button>
+      <button class="btn primary" id="saveBtn">Save changes</button>
+    </div>`;
+  document.getElementById('discardBtn').onclick = () => {
+    if (!confirm('Discard all unsaved changes in this game?')) return;
+    const id = UI.draft.id;
+    UI.draft = null;
+    renderSaveBar();
+    viewGame(id);
+  };
+  document.getElementById('saveBtn').onclick = async () => {
+    const list = changeSummary(JSON.parse(UI.draft.base), UI.draft.g);
+    const text = list.slice(0, 15).map(x => '• ' + x).join('\n') + (list.length > 15 ? `\n… and ${list.length - 15} more` : '');
+    if (!confirm(`Save these changes to Game #${UI.draft.g.number} (${UI.draft.g.date})?\n\n${text}`)) return;
+    const btn = document.getElementById('saveBtn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    const saved = await attempt(() => Store.saveGame(UI.draft.g));
+    if (saved) {
+      UI.draft = { id: saved.id, g: JSON.parse(JSON.stringify(saved)), base: JSON.stringify(saved) };
+      toast('Game saved');
+      renderSaveBar();
+      viewGame(saved.id);
+    } else { btn.disabled = false; btn.textContent = 'Save changes'; }
+  };
 }
 
 /* ============================================================
@@ -788,7 +896,7 @@ function viewData() {
         <h2>Backup</h2>
         <p class="muted small">${db.players.length} players · ${db.games.length} games</p>
         <div class="row gap wrap">
-          ${Store.isAdmin() ? '<a class="btn primary" href="/api/admin/backup">⬇ Full backup (private, JSON)</a>' : ''}
+          ${Store.isAdmin() ? '<button class="btn primary" id="fullBackup">⬇ Full backup (private, JSON)</button>' : ''}
           <button class="btn ${Store.isAdmin() ? '' : 'primary'}" id="exportJson">⬇ Public data (JSON)</button>
           ${live ? '' : '<label class="btn">⬆ Restore from backup<input type="file" id="importJson" accept=".json,application/json" hidden></label>'}
         </div>
@@ -812,6 +920,11 @@ function viewData() {
     </div>
   `;
 
+  if ($('#fullBackup')) $('#fullBackup').onclick = () => attempt(async () => {
+    const res = await fetch('/api/admin/backup', { credentials: 'same-origin' });
+    if (!res.ok) throw new Error('Backup failed (' + res.status + ')');
+    await saveFile(`mafia-bcn-backup-${stamp}.json`, await res.text());
+  });
   $('#exportJson').onclick = () => download(`mafia-bcn-${live ? 'public' : 'local'}-${stamp}.json`, JSON.stringify(Store.get(), null, 2), 'application/json');
   $('#csvSemi').onclick = () => download(`mafia-bcn-${stamp}.csv`, toCSV(Store.get(), ';'), 'text/csv;charset=utf-8');
   $('#csvComma').onclick = () => download(`mafia-bcn-${stamp}.csv`, toCSV(Store.get(), ','), 'text/csv;charset=utf-8');
@@ -860,7 +973,7 @@ function viewSettings() {
           <label class="field"><span>Confidence weight K — how many “average games” every player starts with</span><input type="number" min="0" max="50" name="priorWeight" value="${s.priorWeight}" ${dis}></label>
           <label class="field"><span>Minimum games for “King of the Game”</span><input type="number" min="1" max="50" name="minGames" value="${s.minGames}" ${dis}></label>
           <label class="field"><span>Seats in a new game</span><input type="number" min="6" max="16" name="defaultSeats" value="${s.defaultSeats}" ${dis}></label>
-          ${edit ? '' : '<p class="muted small">Only the admin can change these.</p>'}
+          ${edit ? '<div><button class="btn primary" type="submit">Save settings</button></div>' : '<p class="muted small">Only the admin can change these.</p>'}
         </form>
       </section>
       <section class="card">
@@ -874,13 +987,15 @@ function viewSettings() {
     </div>
   `;
   if (!edit) return;
-  $('#settings').onchange = e => {
+  $('#settings').onsubmit = e => {
+    e.preventDefault();
     const f = e.currentTarget;
     const patch = {
       priorWeight: Math.max(0, Math.min(50, +f.priorWeight.value || 0)),
       minGames: Math.max(1, Math.min(50, +f.minGames.value || 3)),
       defaultSeats: Math.min(16, Math.max(6, +f.defaultSeats.value || 10)),
     };
+    if (!confirm(`Save settings?\n\nK = ${patch.priorWeight}, min games for King = ${patch.minGames}, seats in a new game = ${patch.defaultSeats}`)) return;
     attempt(async () => { await Store.saveSettings(patch); toast('Settings saved'); viewSettings(); });
   };
 }

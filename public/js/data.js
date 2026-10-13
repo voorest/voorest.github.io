@@ -202,36 +202,34 @@ const Store = (() => {
     return game(g.id);
   }
 
-  // Live saves are queued so they reach the server in order; only the latest state matters.
-  const pending = new Map();
-  let chain = Promise.resolve();
-  function saveGame(g) {
-    if (!isLive()) { saveLocal(); return Promise.resolve(); }
+  /** Save a whole game (called by the editor's "Save changes" button). Throws on failure. */
+  async function saveGame(g) {
     const tl = GameLogic.timeline(g);
-    const payload = JSON.parse(JSON.stringify({
+    const copy = JSON.parse(JSON.stringify({
       ...g,
       seats: g.seats.map(s => ({ ...s, alive: g.source === 'xls' ? s.alive : (tl.alive.includes(s.seat) ? 1 : 0) })),
     }));
-    pending.set(g.id, payload);
-    setSaveState('saving');
-    chain = chain.then(async () => {
-      const body = pending.get(g.id);
-      if (!body) return;
-      pending.delete(g.id);
-      try {
-        await api('/api/admin/games/' + g.id, { method: 'PUT', body });
-        if (!pending.size) setSaveState('saved');
-      } catch (e) {
-        setSaveState('error', e.message);
-      }
-    });
-    return chain;
+    if (isLive()) {
+      setSaveState('saving');
+      try { await api('/api/admin/games/' + g.id, { method: 'PUT', body: copy }); }
+      catch (e) { setSaveState('error', e.message); throw e; }
+      setSaveState('saved');
+    }
+    const i = db.games.findIndex(x => x.id === String(g.id));
+    if (i >= 0) db.games[i] = normalize({ games: [copy] }).games[0];
+    saveLocal();
+    return game(g.id);
   }
   const game = id => db.games.find(g => g.id === String(id));
   async function deleteGame(id) {
     if (isLive()) await api('/api/admin/games/' + id, { method: 'DELETE' });
     db.games = db.games.filter(g => g.id !== String(id));
     saveLocal();
+  }
+  /** Running number across all games (like the Attendance sheet: 1, 2, 3 …). */
+  function overallNumber(g) {
+    const all = [...db.games].sort((a, b) => a.date.localeCompare(b.date) || a.number - b.number);
+    return all.findIndex(x => x.id === String(g.id)) + 1;
   }
   const sortedGames = () => [...db.games].sort((a, b) => b.date.localeCompare(a.date) || b.number - a.number);
 
@@ -250,13 +248,13 @@ const Store = (() => {
     uid, init, get, isLive, canEdit, isAdmin, user, loginAvailable, adminData, loadAdmin,
     onSaveState, replace, clear, saveLocal, logout,
     addPlayer, updatePlayer, deletePlayer, updateAccount, playerInUse, player, playerName,
-    newGame, saveGame, game, deleteGame, sortedGames, saveSettings,
+    newGame, saveGame, game, deleteGame, sortedGames, overallNumber, saveSettings,
   };
 })();
 
 /* ============================================================
    GAME LOGIC
-   A round = Day N (nominations, vote-outs) then Night N (shots, checks, heal).
+   A round = Night N (shots, checks, heal) then Day N (nominations, vote-outs).
    ============================================================ */
 const GameLogic = {
   emptyRound() {
@@ -287,11 +285,11 @@ const GameLogic = {
     const phases = [];                    // who was alive at the START of each phase
     game.rounds.forEach((r, i) => {
       const n = i + 1;
+      phases.push({ round: n, phase: 'night', alive: [...alive] });
+      this.nightDeaths(r.night || {}).forEach(d => { if (alive.has(d.seat)) { alive.delete(d.seat); fates[d.seat] = { type: d.type, round: n }; } });
       phases.push({ round: n, phase: 'day', alive: [...alive] });
       (r.removed || []).forEach(s => { if (alive.has(s)) { alive.delete(s); fates[s] = { type: 'removed', round: n }; } });
       (r.eliminated || []).forEach(s => { if (alive.has(s)) { alive.delete(s); fates[s] = { type: 'voted', round: n }; } });
-      phases.push({ round: n, phase: 'night', alive: [...alive] });
-      this.nightDeaths(r.night || {}).forEach(d => { if (alive.has(d.seat)) { alive.delete(d.seat); fates[d.seat] = { type: d.type, round: n }; } });
     });
     // Imported games only know "alive at the end": trust that when it is recorded.
     const explicit = game.source === 'xls' && game.seats.some(s => s.alive === 0 || s.alive === 1);
