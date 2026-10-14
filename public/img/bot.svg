@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs><clipPath id="c"><circle cx="512" cy="512" r="512"/></clipPath></defs>
+  <g clip-path="url(#c)">
+    <!-- flag background -->
+    <rect width="1024" height="512" fill="#0057B7"/>
+    <rect y="512" width="1024" height="512" fill="#FFD700"/>
+    <!-- fedora -->
+    <ellipse cx="512" cy="430" rx="300" ry="54" fill="#000"/>
+    <path d="M352 428 C356 330 376 248 410 214 C450 180 482 206 512 200 C542 206 574 180 614 214 C648 248 668 330 672 428 Z" fill="#000"/>
+    <path d="M360 350 C452 368 572 368 664 350 L670 410 C574 428 450 428 354 410 Z" fill="#FFD700"/>
+    <path d="M512 204 C498 248 500 288 512 322" fill="none" stroke="#1a1a1a" stroke-width="10" stroke-linecap="round"/>
+    <!-- stats bars (the bot keeps the score) -->
+    <g fill="#000">
+      <rect x="360" y="660" width="76" height="140" rx="12"/>
+      <rect x="474" y="590" width="76" height="210" rx="12"/>
+      <rect x="588" y="520" width="76" height="280" rx="12"/>
+    </g>
+    <path d="M330 830 H694" stroke="#000" stroke-width="16" stroke-linecap="round"/>
+  </g>
+</svg>

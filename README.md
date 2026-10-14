@@ -67,4 +67,6 @@ expect from the roles a player got (mafia wins less often than citizens in our g
 - [x] Admin: add/edit games, players, nicknames, private names and settings from the website
 - [x] Linking players to Telegram accounts (admin pre-fills @username, or links a login by hand)
 - [x] Personal "My stats" page
-- [ ] Automatic JSON backups, announcements, notifications
+- [x] Public data cached in KV + browser copy with version check; throttling and rate limits
+- [x] Weekly backups to KV (Sundays) with Telegram reports to admins
+- [ ] Publish game summaries to the Telegram group, announcements, Mini App

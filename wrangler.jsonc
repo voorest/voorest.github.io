@@ -16,5 +16,15 @@
       "migrations_dir": "migrations"
     }
   ],
+  // Fast key-value storage: the public data copy + weekly backups
+  "kv_namespaces": [
+    { "binding": "KV", "id": "3d83db4559b14aa7b999bcc53c83bc05" }
+  ],
+  // Max 30 data requests per minute per IP (protects the free limits)
+  "ratelimits": [
+    { "name": "RL", "namespace_id": "1001", "simple": { "limit": 30, "period": 60 } }
+  ],
+  // Weekly backup: Sundays 07:00 UTC (09:00 Barcelona in summer, 08:00 in winter)
+  "triggers": { "crons": ["0 7 * * 0"] },
   "observability": { "enabled": true }
 }

@@ -2,7 +2,9 @@
  * Mafia BCN — Cloudflare Worker
  *
  * Public:
- *   GET  /api/data                     all public data (nicknames only)
+ *   GET  /api/data?v=<version>         public data (nicknames only) + who is logged in.
+ *                                      Served from a ready-made copy in KV; answers {unchanged:true}
+ *                                      when the browser already has the current version. Rate limited.
  *   GET  /api/me                       who is logged in
  * Login (Telegram OpenID Connect, authorization code + PKCE):
  *   GET  /api/auth/telegram/start      → redirects to Telegram
@@ -19,6 +21,12 @@
  *   DELETE /api/admin/games/:id
  *   PUT    /api/admin/settings         { priorWeight, minGames, defaultSeats }
  *   GET    /api/admin/backup           full database as JSON (private fields included)
+ *   GET    /api/admin/backups          list of stored backups (weekly + manual)
+ *   POST   /api/admin/backups          make a backup now
+ *   GET    /api/admin/backups/:name    download a stored backup
+ *   POST   /api/admin/notify-test      send a test message to admins' Telegram
+ *
+ * Scheduled: every Sunday 07:00 UTC → full backup into KV (keep 12) + Telegram report to admins.
  *
  * Secrets (Cloudflare → Worker → Settings → Variables and Secrets):
  *   TELEGRAM_CLIENT_ID, TELEGRAM_CLIENT_SECRET   from @BotFather → Login Widget
@@ -127,7 +135,7 @@ async function getData(env) {
     else if (nightKey[e.kind]) r.night[nightKey[e.kind]] = e.seat;
   }
   const s = {};
-  for (const r of settings.results) s[r.key] = Number(r.value);
+  for (const r of settings.results) if (!Number.isNaN(Number(r.value))) s[r.key] = Number(r.value);
 
   return {
     schema: 2,
@@ -264,7 +272,9 @@ async function authCallback(request, env) {
     env.DB.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')"),
     env.DB.prepare(`INSERT INTO sessions (token_hash, account_id, expires_at) VALUES (?, ?, datetime('now', '+${SESSION_DAYS} days'))`).bind(await sha256(token), account.id),
   ]);
-  const headers = new Headers({ location: back && back.startsWith('/') ? back : '/' });
+  const target = back && back.startsWith('/') ? back : '/';
+  const [path, hash] = target.split('#');
+  const headers = new Headers({ location: `${path}${path.includes('?') ? '&' : '?'}fresh=1${hash !== undefined ? '#' + hash : ''}` });
   headers.append('set-cookie', cookie(SESSION_COOKIE, token, { maxAge: SESSION_DAYS * 86400 }));
   headers.append('set-cookie', cookie(OAUTH_COOKIE, '', { maxAge: 0, path: '/api/auth' }));
   return new Response(null, { status: 302, headers });
@@ -445,6 +455,133 @@ async function backup(env) {
   return out;
 }
 
+/* ---------------- public snapshot in KV ---------------- */
+// The public data is built once after every admin change and stored in KV with its version.
+// Visitors read that copy (0 database reads); browsers keep their own copy and only ask
+// "is version X still current?".
+const SNAPSHOT_KEY = 'public:data';
+
+async function rebuildSnapshot(env) {
+  const data = await getData(env);
+  const version = new Date().toISOString();
+  data.version = version;
+  const body = JSON.stringify(data);
+  await env.DB.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('dataVersion', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at").bind(version).run();
+  if (env.KV) {
+    try { await env.KV.put(SNAPSHOT_KEY, body, { metadata: { version } }); }
+    catch (e) {
+      // KV allows 1 write per second per key: wait and retry once.
+      await new Promise(r => setTimeout(r, 1200));
+      await env.KV.put(SNAPSHOT_KEY, body, { metadata: { version } });
+    }
+  }
+  return { version, body };
+}
+
+async function publicSnapshot(env) {
+  if (env.KV) {
+    const { value, metadata } = await env.KV.getWithMetadata(SNAPSHOT_KEY);
+    if (value && metadata && metadata.version) return { version: metadata.version, body: value };
+  }
+  return rebuildSnapshot(env);
+}
+
+function meFor(u, env) {
+  return {
+    loginAvailable: telegramConfigured(env),
+    user: u && { accountId: u.id, username: u.username, name: u.display_name, role: u.role, playerId: u.player_id == null ? null : String(u.player_id), nickname: u.nickname },
+  };
+}
+
+async function dataEndpoint(request, env, url) {
+  if (env.RL) {
+    const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+    const { success } = await env.RL.limit({ key: 'data:' + ip });
+    if (!success) return json({ error: 'Too many requests — please wait a minute' }, 429, { 'retry-after': '60' });
+  }
+  const user = getCookie(request, SESSION_COOKIE) ? await currentUser(request, env) : null;
+  const me = JSON.stringify(meFor(user, env));
+  // Admins always get fresh data straight from the database.
+  if (user && user.role === 'admin') {
+    const data = await getData(env);
+    return new Response(`{"me":${me},"version":"live","data":${JSON.stringify(data)}}`, { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
+  }
+  const snap = await publicSnapshot(env);
+  if (url.searchParams.get('v') === snap.version) return json({ me: JSON.parse(me), version: snap.version, unchanged: true });
+  return new Response(`{"me":${me},"version":${JSON.stringify(snap.version)},"data":${snap.body}}`, { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
+}
+
+/* ---------------- backups in KV ---------------- */
+const BACKUP_PREFIX = 'backup:';
+const KEEP = { weekly: 12, manual: 5 };
+
+async function makeBackup(env, kind) {
+  if (!env.KV) throw new Error('KV storage is not connected');
+  const data = await backup(env);
+  const body = JSON.stringify(data);
+  const at = new Date().toISOString();
+  const name = `${at.slice(0, 16).replace(/[:]/g, '')}-${kind}`;            // e.g. 2026-10-18T0700-weekly
+  const meta = { at, kind, size: body.length, games: data.tables.games.length, players: data.tables.players.length };
+  await env.KV.put(BACKUP_PREFIX + name, body, { metadata: meta });
+  // keep only the newest N of each kind
+  const all = await listBackups(env);
+  const old = all.filter(b => b.kind === kind).slice(KEEP[kind] || 10);
+  for (const b of old) await env.KV.delete(BACKUP_PREFIX + b.name);
+  return { name, ...meta };
+}
+
+async function listBackups(env) {
+  if (!env.KV) return [];
+  const out = [];
+  let cursor;
+  do {
+    const page = await env.KV.list({ prefix: BACKUP_PREFIX, cursor });
+    for (const k of page.keys) out.push({ name: k.name.slice(BACKUP_PREFIX.length), ...(k.metadata || {}) });
+    cursor = page.list_complete ? null : page.cursor;
+  } while (cursor);
+  return out.sort((a, b) => b.name.localeCompare(a.name));
+}
+
+/* ---------------- Telegram messages to admins (free Bot API) ---------------- */
+const esc = t => String(t).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+async function notifyAdmins(env, html) {
+  if (!env.TELEGRAM_BOT_TOKEN) return [{ ok: false, error: 'TELEGRAM_BOT_TOKEN is not set' }];
+  const { results } = await env.DB.prepare("SELECT provider_uid, username FROM accounts WHERE role = 'admin' AND provider = 'telegram' AND provider_uid IS NOT NULL").all();
+  const out = [];
+  for (const a of results) {
+    const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chat_id: a.provider_uid, text: html, parse_mode: 'HTML', disable_web_page_preview: true }),
+    });
+    const body = await res.json().catch(() => ({}));
+    out.push({ to: a.username, ok: !!body.ok, error: body.ok ? null : (body.description || `HTTP ${res.status}`) });
+  }
+  return out;
+}
+
+async function alertAdmins(env, message) {
+  // at most one error alert per hour
+  try {
+    if (env.KV) {
+      if (await env.KV.get('alert:last')) return;
+      await env.KV.put('alert:last', new Date().toISOString(), { expirationTtl: 3600 });
+    }
+    await notifyAdmins(env, `⚠️ <b>Mafia BCN site error</b>\n${esc(message).slice(0, 500)}\n\n(further alerts muted for 1 hour)`);
+  } catch (e) { console.error('alert failed', e); }
+}
+
+async function weeklyBackup(env) {
+  try {
+    const b = await makeBackup(env, 'weekly');
+    await notifyAdmins(env, `✅ <b>Weekly backup saved</b>\n${b.games} games · ${b.players} players · ${Math.round(b.size / 1024)} KB\nThe last ${KEEP.weekly} weekly backups are kept (Data page → Backups).`);
+  } catch (e) {
+    console.error('weekly backup failed', e);
+    await notifyAdmins(env, `❌ <b>Weekly backup failed</b>\n${esc(e.message || e)}`).catch(() => {});
+  }
+}
+
 /* ---------------- router ---------------- */
 async function readBody(request) {
   if (!(request.headers.get('content-type') || '').includes('application/json')) throw new HttpError(415, 'Expected JSON');
@@ -459,47 +596,72 @@ async function api(request, env, url) {
   const path = url.pathname;
   const method = request.method;
 
-  if (path === '/api/data' && method === 'GET') return json(await getData(env), 200, { 'cache-control': 'no-cache' });
+  if (path === '/api/data' && method === 'GET') return dataEndpoint(request, env, url);
   if (path === '/api/health') return json({ ok: true });
-  if (path === '/api/me' && method === 'GET') {
-    const u = await currentUser(request, env);
-    return json({
-      loginAvailable: telegramConfigured(env),
-      user: u && { accountId: u.id, username: u.username, name: u.display_name, role: u.role, playerId: u.player_id == null ? null : String(u.player_id), nickname: u.nickname },
-    });
+  if (path === '/api/me' && method === 'GET') return json(meFor(await currentUser(request, env), env));
+  if (path === '/api/auth/telegram/start' && method === 'GET') {
+    if (env.RL) {
+      const { success } = await env.RL.limit({ key: 'auth:' + (request.headers.get('cf-connecting-ip') || 'unknown') });
+      if (!success) return new Response('Too many login attempts — please wait a minute.', { status: 429 });
+    }
+    return authStart(request, env);
   }
-  if (path === '/api/auth/telegram/start' && method === 'GET') return authStart(request, env);
   if (path === '/api/auth/telegram/callback' && method === 'GET') return authCallback(request, env);
   if (path === '/api/auth/logout' && method === 'POST') { checkOrigin(request); return logout(request, env); }
 
   if (path.startsWith('/api/admin/')) {
     checkOrigin(request);
     const admin = await requireAdmin(request, env);
+    if (path === '/api/admin/backups' && method === 'GET') return json({ backups: await listBackups(env) });
+    if (path === '/api/admin/backups' && method === 'POST') return json(await makeBackup(env, 'manual'), 201);
+    const bm = path.match(/^\/api\/admin\/backups\/([\w-]+)$/);
+    if (bm && method === 'GET') {
+      const value = env.KV ? await env.KV.get(BACKUP_PREFIX + bm[1]) : null;
+      if (!value) throw new HttpError(404, 'Backup not found');
+      return new Response(value, { headers: { 'content-type': 'application/json; charset=utf-8', 'content-disposition': `attachment; filename="mafia-bcn-backup-${bm[1]}.json"`, 'cache-control': 'no-store' } });
+    }
+    if (path === '/api/admin/notify-test' && method === 'POST') {
+      return json({ results: await notifyAdmins(env, `👋 Test message from <b>Mafia BCN</b>. Backup reports and alerts will arrive here.`) });
+    }
     const m = path.match(/^\/api\/admin\/(players|accounts|games|settings|backup)(?:\/(\d+))?$/);
     if (!m) throw new HttpError(404, 'Not found');
     const [, resource, id] = m;
     const body = ['POST', 'PUT', 'PATCH'].includes(method) ? await readBody(request) : null;
-    if (resource === 'players') {
-      if (method === 'GET' && !id) return json(await adminPlayers(env));
-      if (method === 'POST' && !id) return json(await createPlayer(env, body), 201);
-      if (method === 'PATCH' && id) return json(await updatePlayer(env, id, body));
-      if (method === 'DELETE' && id) return json(await deletePlayer(env, id));
+    if (method !== 'GET') {
+      // every successful change refreshes the public copy
+      const res = await adminWrite(resource, id, method, body, env, admin);
+      await rebuildSnapshot(env);
+      return res;
     }
-    if (resource === 'accounts' && method === 'PATCH' && id) return json(await updateAccount(env, id, body, admin));
-    if (resource === 'games') {
-      if (method === 'POST' && !id) return json(await createGame(env, body), 201);
-      if (method === 'PUT' && id) return json(await saveGame(env, id, body));
-      if (method === 'DELETE' && id) return json(await deleteGame(env, id));
-    }
-    if (resource === 'settings' && method === 'PUT') return json(await saveSettings(env, body));
-    if (resource === 'backup' && method === 'GET') return json(await backup(env), 200, { 'content-disposition': `attachment; filename="mafia-bcn-backup-${new Date().toISOString().slice(0, 10)}.json"` });
+    if (resource === 'players' && !id) return json(await adminPlayers(env));
+    if (resource === 'backup') return json(await backup(env), 200, { 'content-disposition': `attachment; filename="mafia-bcn-backup-${new Date().toISOString().slice(0, 10)}.json"` });
     throw new HttpError(405, 'Method not allowed');
   }
   throw new HttpError(404, 'Not found');
 }
 
+async function adminWrite(resource, id, method, body, env, admin) {
+  if (resource === 'players') {
+    if (method === 'POST' && !id) return json(await createPlayer(env, body), 201);
+    if (method === 'PATCH' && id) return json(await updatePlayer(env, id, body));
+    if (method === 'DELETE' && id) return json(await deletePlayer(env, id));
+  }
+  if (resource === 'accounts' && method === 'PATCH' && id) return json(await updateAccount(env, id, body, admin));
+  if (resource === 'games') {
+    if (method === 'POST' && !id) return json(await createGame(env, body), 201);
+    if (method === 'PUT' && id) return json(await saveGame(env, id, body));
+    if (method === 'DELETE' && id) return json(await deleteGame(env, id));
+  }
+  if (resource === 'settings' && method === 'PUT') return json(await saveSettings(env, body));
+  throw new HttpError(405, 'Method not allowed');
+}
+
 export default {
-  async fetch(request, env) {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(weeklyBackup(env));
+  },
+
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/api/')) {
       try {
@@ -507,6 +669,7 @@ export default {
       } catch (err) {
         if (err instanceof HttpError) return json({ error: err.message }, err.status);
         console.error(err);
+        if (ctx) ctx.waitUntil(alertAdmins(env, `${request.method} ${url.pathname}: ${err.message || err}`));
         return json({ error: 'Server error' }, 500);
       }
     }

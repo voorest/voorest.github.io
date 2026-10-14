@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- Ukrainian flag split: blue above, yellow below (hard edge) -->
+    <linearGradient id="skySplit" gradientUnits="userSpaceOnUse" x1="0" y1="170" x2="0" y2="500">
+      <stop offset="0" stop-color="#0057B7"/><stop offset="0.74" stop-color="#0057B7"/>
+      <stop offset="0.74" stop-color="#FFD700"/><stop offset="1" stop-color="#FFD700"/>
+    </linearGradient>
+    <linearGradient id="textSplit" gradientUnits="userSpaceOnUse" x1="0" y1="500" x2="0" y2="660">
+      <stop offset="0" stop-color="#0057B7"/><stop offset="0.56" stop-color="#0057B7"/>
+      <stop offset="0.56" stop-color="#FFD700"/><stop offset="1" stop-color="#FFD700"/>
+    </linearGradient>
+    <clipPath id="inner"><circle cx="512" cy="512" r="440"/></clipPath>
+    <clipPath id="upper"><rect x="0" y="0" width="1024" height="512"/></clipPath>
+  </defs>
+
+  <rect width="1024" height="1024" fill="#000"/>
+
+  <!-- clean, complete rings -->
+  <circle cx="512" cy="512" r="478" fill="none" stroke="#FFD700" stroke-width="16"/>
+  <circle cx="512" cy="512" r="452" fill="none" stroke="#0057B7" stroke-width="8"/>
+
+  <g clip-path="url(#inner)">
+    <!-- Barcelona skyline -->
+    <g fill="url(#skySplit)">
+      <!-- old-town blocks along the bottom -->
+      <path d="M90 500 V430 h40 v-20 h14 v20 h30 v-46 h12 v-14 h12 v14 h12 v46 h34 v-30 h22 v30 h20 V500 Z"/>
+      <path d="M640 500 V444 h30 v-24 h16 v24 h26 v-40 h10 v-12 h12 v12 h10 v40 h36 v-28 h24 v28 h26 v-20 h20 v20 h40 V500 Z"/>
+      <!-- Sagrada Família: four tapered spires + central tower -->
+      <path d="M232 500 V300 l10 -70 l10 70 V500 Z"/>
+      <path d="M262 500 V270 l12 -90 l12 90 V500 Z"/>
+      <path d="M296 500 V262 l12 -96 l12 96 V500 Z"/>
+      <path d="M330 500 V292 l10 -74 l10 74 V500 Z"/>
+      <path d="M222 500 V380 h138 V500 Z"/>
+      <!-- Torre Glòries -->
+      <path d="M700 500 V286 C700 200 780 200 780 286 V500 Z"/>
+      <!-- palms -->
+      <path d="M182 500 C186 440 190 380 186 330" stroke="url(#skySplit)" stroke-width="8" fill="none"/>
+      <path d="M186 330 c-24 -6 -46 6 -60 22 M186 330 c-16 -20 -40 -24 -58 -16 M186 330 c6 -24 -2 -44 -18 -56 M186 330 c20 -18 44 -18 62 -6 M186 330 c24 0 42 16 50 34" stroke="#0057B7" stroke-width="9" fill="none" stroke-linecap="round"/>
+      <path d="M842 500 C838 446 834 392 838 346" stroke="url(#skySplit)" stroke-width="8" fill="none"/>
+      <path d="M838 346 c24 -6 46 6 60 22 M838 346 c16 -20 40 -24 58 -16 M838 346 c-6 -24 2 -44 18 -56 M838 346 c-20 -18 -44 -18 -62 -6 M838 346 c-24 0 -42 16 -50 34" stroke="#0057B7" stroke-width="9" fill="none" stroke-linecap="round"/>
+    </g>
+
+    <!-- the Don: black silhouette with yellow rim light -->
+    <g clip-path="url(#upper)">
+      <path d="M248 560 C262 482 318 446 400 428 L470 404 C490 420 534 420 554 404 L624 428 C706 446 762 482 776 560 Z"
+            fill="#000" stroke="#FFD700" stroke-width="5" stroke-linejoin="round"/>
+      <!-- lapels -->
+      <path d="M470 404 L430 470 L478 520 L512 432 Z M554 404 L594 470 L546 520 L512 432 Z" fill="#000" stroke="#0057B7" stroke-width="4" stroke-linejoin="round"/>
+      <!-- shirt + tie -->
+      <path d="M488 414 L512 432 L536 414 L512 520 Z" fill="#0057B7"/>
+      <path d="M512 430 L524 446 L518 456 L530 530 L512 552 L494 530 L506 456 L500 446 Z" fill="#FFD700"/>
+      <!-- pocket square -->
+      <path d="M622 500 l26 -14 l8 14 Z" fill="#FFD700"/>
+      <!-- head -->
+      <path d="M452 300 C452 252 572 252 572 300 L568 360 C562 396 540 414 512 414 C484 414 462 396 456 360 Z" fill="#000" stroke="#0057B7" stroke-width="3"/>
+      <path d="M568 300 L566 356 C560 390 540 408 520 412" fill="none" stroke="#FFD700" stroke-width="4" stroke-linecap="round"/>
+      <!-- fedora -->
+      <ellipse cx="512" cy="278" rx="156" ry="28" fill="#FFD700"/>
+      <path d="M428 276 C430 228 440 186 458 168 C480 150 498 164 512 160 C526 164 544 150 566 168 C584 186 594 228 596 276 Z" fill="#FFD700"/>
+      <path d="M432 236 C480 246 544 246 592 236 L596 270 C546 280 478 280 428 270 Z" fill="#0057B7"/>
+      <path d="M512 162 C504 186 506 206 512 226" fill="none" stroke="#C9A800" stroke-width="5" stroke-linecap="round"/>
+    </g>
+  </g>
+
+  <!-- title -->
+  <text x="512" y="664" text-anchor="middle" font-family="Lora, 'DejaVu Serif', serif" font-weight="700" font-size="196" letter-spacing="4" style="font-variant-ligatures:none;font-feature-settings:'liga' 0"
+        fill="url(#textSplit)" stroke="#000" stroke-width="10" paint-order="stroke">MAFIA</text>
+  <g stroke="#FFD700" stroke-width="6" stroke-linecap="round">
+    <line x1="232" y1="728" x2="388" y2="728"/>
+    <line x1="636" y1="728" x2="792" y2="728"/>
+  </g>
+  <text x="512" y="762" text-anchor="middle" font-family="Lora, 'DejaVu Serif', serif" font-weight="700" font-size="92" letter-spacing="14" fill="#FFD700">BCN</text>
+
+  <!-- stylised tryzub (trident) -->
+  <g transform="translate(512 838)" fill="none" stroke="#FFD700" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M0 -46 V40"/>
+    <path d="M-34 -36 V18 C-34 36 -18 40 0 40 C18 40 34 36 34 18 V-36"/>
+    <path d="M-34 18 C-18 18 -8 8 0 -6 C8 8 18 18 34 18"/>
+    <path d="M-14 40 L0 56 L14 40"/>
+  </g>
+</svg>

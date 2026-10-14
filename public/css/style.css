@@ -331,3 +331,5 @@ tr.editing td { background: var(--surface-2); }
 .savebar .spacer { flex: 1; }
 body:has(.savebar) main { padding-bottom: 7rem; }
 body:has(.savebar) #toast { bottom: 84px; }
+
+.backup-list { margin-top: .75rem; }

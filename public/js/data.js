@@ -94,25 +94,87 @@ const Store = (() => {
     return out;
   }
 
-  /* ---- loading ---- */
+  /* ---- loading ----
+     Live site: the browser keeps its own copy of the public data (+ version) in localStorage.
+     Each visit asks the server "is my version still current?" (1 tiny request, 0 database reads).
+     Anti-spam: 3 checks per minute are free; after that the device must wait 10 s, then 30 s,
+     60 s, 2 min, 5 min (like "resend SMS code"). While waiting, the saved copy is shown. */
+  const CACHE_KEY = 'mafia-bcn-live-cache';
+  const CHECKS_KEY = 'mafia-bcn-checks';
+  const WAITS = [0, 10, 30, 60, 120, 300];
+  let throttledFor = 0;
+
+  function readCache() {
+    try {
+      const c = JSON.parse(localStorage.getItem(CACHE_KEY));
+      if (c && c.version && c.data && Array.isArray(c.data.games) && Array.isArray(c.data.players)) return c;
+    } catch (e) { /* missing or broken → download again */ }
+    return null;
+  }
+  function writeCache(c) { try { localStorage.setItem(CACHE_KEY, JSON.stringify(c)); } catch (e) { /* storage full or blocked */ } }
+
+  /** Returns 0 if a check is allowed now, otherwise seconds to wait. */
+  function checkThrottle() {
+    let st;
+    try { st = JSON.parse(localStorage.getItem(CHECKS_KEY)) || {}; } catch (e) { st = {}; }
+    const now = Date.now();
+    const save = () => { try { localStorage.setItem(CHECKS_KEY, JSON.stringify(st)); } catch (e) { /* ignore */ } };
+    if (st.until && now < st.until) return Math.ceil((st.until - now) / 1000);
+    if (st.until && now - st.until > 10 * 60e3) st.level = 0;          // calm for 10 minutes → forgiven
+    st.times = (st.times || []).filter(t => now - t < 60e3);
+    if (st.times.length >= 3) {
+      st.level = Math.min((st.level || 0) + 1, WAITS.length - 1);
+      st.until = now + WAITS[st.level] * 1000;
+      st.times = [];
+      save();
+      return WAITS[st.level];
+    }
+    st.times.push(now);
+    save();
+    return 0;
+  }
+
   async function init() {
     if (location.protocol.startsWith('http')) {
+      const cache = readCache();
+      const useCache = () => { db = normalize(cache.data); mode = 'live'; me = cache.me || me; return db; };
+      // Admins are never throttled (role remembered from the last visit; the server checks it anyway).
+      const wasAdmin = cache && cache.me && cache.me.user && cache.me.user.role === 'admin';
+      // Just logged in (?fresh=1) → always ask the server once.
+      const fresh = new URLSearchParams(location.search).has('fresh');
+      if (fresh) history.replaceState(null, '', location.pathname + location.hash);
+      if (cache && !wasAdmin && !fresh) {
+        const wait = checkThrottle();
+        if (wait) { throttledFor = wait; return useCache(); }
+      }
       try {
-        const res = await fetch('/api/data', { headers: { Accept: 'application/json' } });
+        const res = await fetch('/api/data' + (cache ? '?v=' + encodeURIComponent(cache.version) : ''), { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } });
+        if (res.status === 429 && cache) { throttledFor = 60; return useCache(); }
         if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
-          db = normalize(await res.json());
+          const body = await res.json();
           mode = 'live';
-          try { me = await api('/api/me'); } catch (e) { /* not logged in */ }
+          me = body.me || me;
+          if (body.unchanged && cache) {
+            db = normalize(cache.data);
+            if (JSON.stringify(cache.me) !== JSON.stringify(me)) writeCache({ ...cache, me });
+          } else {
+            db = normalize(body.data);
+            writeCache({ version: body.version, data: body.data, me, savedAt: new Date().toISOString() });
+          }
           if (isAdmin()) await loadAdmin();
           return db;
         }
-      } catch (e) { /* no API here → local mode */ }
+      } catch (e) {
+        if (cache) return useCache();      // offline: show the saved copy
+      }
     }
     mode = 'local';
     try { db = normalize(JSON.parse(localStorage.getItem(KEY))); }
     catch (e) { db = empty(); }
     return db;
   }
+  const throttleWait = () => throttledFor;
+
   async function loadAdmin() {
     try { admin = await api('/api/admin/players'); } catch (e) { console.warn(e); }
     return admin;
@@ -239,16 +301,22 @@ const Store = (() => {
     saveLocal();
   }
 
+  const listBackups = () => api('/api/admin/backups');
+  const backupNow = () => api('/api/admin/backups', { method: 'POST', body: {} });
+  const notifyTest = () => api('/api/admin/notify-test', { method: 'POST', body: {} });
+
   async function logout() {
+    try { localStorage.removeItem(CACHE_KEY); } catch (e) { /* ignore */ }
     await api('/api/auth/logout', { method: 'POST' });
     location.reload();
   }
 
   return {
-    uid, init, get, isLive, canEdit, isAdmin, user, loginAvailable, adminData, loadAdmin,
+    uid, init, throttleWait, get, isLive, canEdit, isAdmin, user, loginAvailable, adminData, loadAdmin,
     onSaveState, replace, clear, saveLocal, logout,
     addPlayer, updatePlayer, deletePlayer, updateAccount, playerInUse, player, playerName,
     newGame, saveGame, game, deleteGame, sortedGames, overallNumber, saveSettings,
+    listBackups, backupNow, notifyTest,
   };
 })();
 

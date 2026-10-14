@@ -117,6 +117,8 @@ function route() {
     banner = db.demo
       ? `<div class="demo-banner">Local mode with <b>demo data</b>. Real data lives on the live site.</div>`
       : `<div class="demo-banner subtle">Local mode — data is stored in this browser only.</div>`;
+  } else if (Store.throttleWait()) {
+    banner = `<div class="demo-banner subtle">Showing your saved copy of the data — too many refreshes, the next update check is possible in ${Store.throttleWait()} s.</div>`;
   } else if (Store.isAdmin()) {
     banner = `<div class="demo-banner subtle">Admin mode — game changes are stored only when you press <b>Save changes</b>.</div>`;
   }
@@ -910,6 +912,15 @@ function viewData() {
           <button class="btn ghost" id="csvComma">CSV (“,”)</button>
         </div>
       </section>
+      ${Store.isAdmin() ? `<section class="card">
+        <h2>Backups in Cloudflare</h2>
+        <p class="muted small">Every Sunday at 09:00 (08:00 in winter) a full backup is stored automatically; the last 12 are kept, plus the last 5 manual ones. You get a Telegram message each time.</p>
+        <div class="row gap wrap">
+          <button class="btn" id="backupNow">Back up now</button>
+          <button class="btn ghost" id="notifyTest">Send test message to my Telegram</button>
+        </div>
+        <div id="backupList" class="backup-list"><p class="muted small">Loading…</p></div>
+      </section>` : ''}
       ${live ? '' : `<section class="card">
         <h2>Demo & reset</h2>
         <div class="row gap wrap">
@@ -928,6 +939,31 @@ function viewData() {
   $('#exportJson').onclick = () => download(`mafia-bcn-${live ? 'public' : 'local'}-${stamp}.json`, JSON.stringify(Store.get(), null, 2), 'application/json');
   $('#csvSemi').onclick = () => download(`mafia-bcn-${stamp}.csv`, toCSV(Store.get(), ';'), 'text/csv;charset=utf-8');
   $('#csvComma').onclick = () => download(`mafia-bcn-${stamp}.csv`, toCSV(Store.get(), ','), 'text/csv;charset=utf-8');
+  if (Store.isAdmin()) {
+    const renderBackups = async () => {
+      const box = $('#backupList');
+      const res = await attempt(() => Store.listBackups());
+      if (!res || !box) return;
+      box.innerHTML = res.backups.length ? `<table><thead><tr><th>When</th><th>Type</th><th>Games</th><th>Players</th><th>Size</th><th></th></tr></thead><tbody>${res.backups.map(b => `
+        <tr><td>${h(new Date(b.at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }))}</td><td>${h(b.kind)}</td><td>${b.games}</td><td>${b.players}</td><td>${Math.round(b.size / 1024)} KB</td>
+        <td><button class="btn small" data-dl="${h(b.name)}">⬇ Download</button></td></tr>`).join('')}</tbody></table>`
+        : '<p class="muted small">No backups yet — the first weekly one runs on Sunday, or press “Back up now”.</p>';
+      $$('[data-dl]').forEach(btn => btn.onclick = () => attempt(async () => {
+        const r = await fetch('/api/admin/backups/' + encodeURIComponent(btn.dataset.dl), { credentials: 'same-origin' });
+        if (!r.ok) throw new Error('Download failed (' + r.status + ')');
+        await saveFile(`mafia-bcn-backup-${btn.dataset.dl}.json`, await r.text());
+      }));
+    };
+    renderBackups();
+    $('#backupNow').onclick = () => attempt(async () => { const b = await Store.backupNow(); toast(`Backup saved (${b.games} games, ${Math.round(b.size / 1024)} KB)`); renderBackups(); });
+    $('#notifyTest').onclick = () => attempt(async () => {
+      const r = await Store.notifyTest();
+      const bad = r.results.filter(x => !x.ok);
+      if (!r.results.length) toast('No admin Telegram account found');
+      else if (bad.length) toast('⚠ ' + bad.map(x => `@${x.to}: ${x.error}`).join('; ') + ' — open @mafia_bcn_bot and press Start');
+      else toast('Sent! Check Telegram');
+    });
+  }
   if (live) return;
   $('#importJson').onchange = e => {
     const file = e.target.files[0];
