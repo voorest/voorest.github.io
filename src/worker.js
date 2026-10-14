@@ -486,8 +486,25 @@ async function publicSnapshot(env) {
   return rebuildSnapshot(env);
 }
 
-function meFor(u, env) {
+/** Local development only: "Dev login" works when DEV_LOGIN=true (from .dev.vars) AND the site runs on localhost. */
+function devLoginAllowed(env, url) {
+  return env.DEV_LOGIN === 'true' && url && ['localhost', '127.0.0.1'].includes(url.hostname);
+}
+
+async function devLogin(env, url) {
+  if (!devLoginAllowed(env, url)) throw new HttpError(404, 'Not found');
+  let acc = await env.DB.prepare("SELECT id FROM accounts WHERE provider = 'telegram' AND provider_uid = 'dev-admin'").first();
+  if (!acc) {
+    acc = await env.DB.prepare("INSERT INTO accounts (provider, provider_uid, username, display_name, role, status) VALUES ('telegram', 'dev-admin', 'local-admin', 'Local admin', 'admin', 'linked') RETURNING id").first();
+  }
+  const token = randomToken(32);
+  await env.DB.prepare(`INSERT INTO sessions (token_hash, account_id, expires_at) VALUES (?, ?, datetime('now', '+1 days'))`).bind(await sha256(token), acc.id).run();
+  return redirect('/?fresh=1', { 'set-cookie': cookie(SESSION_COOKIE, token, { maxAge: 86400 }) });
+}
+
+function meFor(u, env, url) {
   return {
+    devLogin: devLoginAllowed(env, url),
     loginAvailable: telegramConfigured(env),
     user: u && { accountId: u.id, username: u.username, name: u.display_name, role: u.role, playerId: u.player_id == null ? null : String(u.player_id), nickname: u.nickname },
   };
@@ -500,7 +517,7 @@ async function dataEndpoint(request, env, url) {
     if (!success) return json({ error: 'Too many requests — please wait a minute' }, 429, { 'retry-after': '60' });
   }
   const user = getCookie(request, SESSION_COOKIE) ? await currentUser(request, env) : null;
-  const me = JSON.stringify(meFor(user, env));
+  const me = JSON.stringify(meFor(user, env, url));
   // Admins always get fresh data straight from the database.
   if (user && user.role === 'admin') {
     const data = await getData(env);
@@ -598,7 +615,8 @@ async function api(request, env, url) {
 
   if (path === '/api/data' && method === 'GET') return dataEndpoint(request, env, url);
   if (path === '/api/health') return json({ ok: true });
-  if (path === '/api/me' && method === 'GET') return json(meFor(await currentUser(request, env), env));
+  if (path === '/api/me' && method === 'GET') return json(meFor(await currentUser(request, env), env, url));
+  if (path === '/api/auth/dev-login' && method === 'GET') return devLogin(env, url);
   if (path === '/api/auth/telegram/start' && method === 'GET') {
     if (env.RL) {
       const { success } = await env.RL.limit({ key: 'auth:' + (request.headers.get('cf-connecting-ip') || 'unknown') });

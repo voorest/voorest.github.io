@@ -12,6 +12,9 @@ Owner and game master: @voorest (the only admin). Live: https://mafia-bcn.voores
 - The repo is public, so **no real data in git**: `data/` is ignored (xlsx, backups, `import.sql`).
 - I (Claude) change the DB through the Cloudflare connector; schema changes are applied by hand. Also insert the migration name into `d1_migrations`.
 
+## Local development
+`npm run seed:local` (copies the newest `data/mafia-bcn-backup-*.json` into the local D1), then `npm run dev`. On localhost with `DEV_LOGIN=true` in `.dev.vars` there is a "Dev login (local admin)" button. It is disabled in production (needs both the var and the localhost hostname).
+
 ## Game rules as modelled
 - Roles: citizen (МИР), sheriff (Ш), doctor (ЛІК), **maniac (МАН) = citizens' team**, mafia (М), don (ДМ).
 - Winner is `town` or `mafia`; every seat on the winning team gets a win.
@@ -62,4 +65,4 @@ Sessions are stored in D1 as SHA-256 hashes; the cookie is HttpOnly.
 ## Ideas / next
 - Bot: publish a game summary to the group, editable or deletable via the stored message_id; game announcements and sign-up; `/mystats`; open the site as a Telegram Mini App.
 - Settings that are still open: rating formula details, which titles to keep.
-- Logo: `public/img/logo.svg|png` (Ukrainian blue #0057B7 and yellow #FFD700) and bot avatar `public/img/bot.svg|png`.
+- Logo images (owner-made) are kept privately in `data/` (tg-logo-full.jpg, tg-logo-bot-full.jpg).

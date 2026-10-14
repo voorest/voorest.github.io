@@ -191,6 +191,7 @@ const Store = (() => {
   const isLive = () => mode === 'live';
   const user = () => me.user;
   const loginAvailable = () => me.loginAvailable;
+  const devLogin = () => !!me.devLogin;
   const isAdmin = () => mode === 'live' && me.user && me.user.role === 'admin';
   const canEdit = () => mode === 'local' || isAdmin();
   const adminData = () => admin;
@@ -312,7 +313,7 @@ const Store = (() => {
   }
 
   return {
-    uid, init, throttleWait, get, isLive, canEdit, isAdmin, user, loginAvailable, adminData, loadAdmin,
+    uid, init, throttleWait, get, isLive, canEdit, isAdmin, user, loginAvailable, devLogin, adminData, loadAdmin,
     onSaveState, replace, clear, saveLocal, logout,
     addPlayer, updatePlayer, deletePlayer, updateAccount, playerInUse, player, playerName,
     newGame, saveGame, game, deleteGame, sortedGames, overallNumber, saveSettings,

@@ -1,0 +1,2 @@
+# Copy this file to .dev.vars (it is git-ignored). Used only by "npm run dev" on your computer.
+DEV_LOGIN=true

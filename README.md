@@ -34,6 +34,19 @@ git push origin dev     # does NOT deploy
 git checkout master && git merge dev && git push   # deploys
 ```
 
+## Run it on your computer (before releasing)
+
+Needs [Node.js LTS](https://nodejs.org). It runs a **local copy**; the real database is never touched.
+
+```bash
+npm install                 # once: installs wrangler (Cloudflare's tool)
+copy .dev.vars.example .dev.vars    # once (Windows; on Mac/Linux use cp): enables "Dev login"
+# Live site → Data → "Full backup" → save into data/   (any time you want fresh data locally)
+npm run seed:local          # loads the newest data/mafia-bcn-backup-*.json into the local database
+npm run dev                 # open http://localhost:8787 → "Dev login (local admin)"
+```
+To try the Sunday backup job locally, run `npm run dev:cron`, then open http://localhost:8787/__scheduled.
+
 ## Login & admin
 
 Secrets live in Cloudflare (Worker → Settings → Variables and Secrets), never in this repo:

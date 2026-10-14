@@ -90,6 +90,8 @@ function renderAuth() {
     el.innerHTML = `<span class="who">${h(u.nickname || (u.username ? '@' + u.username : u.name || 'you'))}${u.role === 'admin' ? ' <span class="chip admin">admin</span>' : ''}</span>
       <button class="btn small ghost" id="logoutBtn">Log out</button>`;
     document.getElementById('logoutBtn').onclick = () => attempt(() => Store.logout());
+  } else if (Store.devLogin()) {
+    el.innerHTML = `<a class="btn small" href="/api/auth/dev-login">Dev login (local admin)</a>`;
   } else if (Store.loginAvailable()) {
     el.innerHTML = `<a class="btn small tg" href="/api/auth/telegram/start?back=${encodeURIComponent('/' + (location.hash || ''))}">Log in with Telegram</a>`;
   } else {
