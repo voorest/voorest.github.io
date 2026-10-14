@@ -126,6 +126,10 @@ function route() {
   }
   document.getElementById('banner').innerHTML = banner;
   renderAuth();
+  // Data and Settings are for the admin only (in local mode they stay available for editing).
+  const adminPages = Store.canEdit();
+  document.querySelectorAll('#nav [data-admin]').forEach(a => { a.hidden = !adminPages; });
+  if (!adminPages && (view === 'data' || view === 'settings')) { location.replace('#/dashboard'); return; }
   const views = {
     dashboard: viewDashboard, games: viewGames, game: () => viewGame(id),
     players: viewPlayers, player: () => viewPlayer(id), data: viewData, settings: viewSettings,
@@ -161,7 +165,7 @@ const LB_COLS = [
   { key: 'games', label: 'Games', get: p => p.games },
   { key: 'wins', label: 'Wins', get: p => p.wins },
   { key: 'winRate', label: 'Win %', get: p => p.winRate },
-  { key: 'rating', label: 'Rating', get: p => p.rating, title: 'Win rate adjusted for number of games (see Settings)' },
+  { key: 'rating', label: 'Rating', get: p => p.rating, title: 'Win rate adjusted for number of games (see the note below the table)' },
   { key: 'aboveExpected', label: '± exp.', get: p => p.aboveExpected, title: 'Wins above/below what is expected for the roles this player got' },
   { key: 'days', label: 'Days', get: p => p.days },
   ...ROLE_ORDER.map(r => ({ key: r, label: ROLES[r].label, get: p => p.roleRating[r] + p.byRole[r].g / 1e4 })),
@@ -254,7 +258,7 @@ function viewDashboard() {
           </tbody>
         </table>
       </div>
-      <p class="muted small"><b>No.</b> = player number in order of joining (new players get the next number). <b>Rating</b> = win rate adjusted for number of games, see <a href="#/settings">Settings</a>.
+      <p class="muted small"><b>No.</b> = player number in order of joining (new players get the next number). <b>Rating</b> = win rate adjusted for number of games: (wins + ${st.K} × ${pct(st.overallRate)}) ÷ (games + ${st.K}), so few games stay close to the average.
       <b>± exp.</b> = wins above what the roles a player got would normally give. Role columns: wins/games. Click a header to sort.</p>
     </section>
 
