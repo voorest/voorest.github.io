@@ -45,7 +45,8 @@ copy .dev.vars.example .dev.vars    # once (Windows; on Mac/Linux use cp): enabl
 npm run seed:local          # loads the newest data/mafia-bcn-backup-*.json into the local database
 npm run dev                 # open http://localhost:8787 → "Dev login (local admin)"
 ```
-To try the Sunday backup job locally, run `npm run dev:cron`, then open http://localhost:8787/__scheduled.
+`seed:local` also creates the tables. Without a backup in `data/` it loads `data/import.sql` (the original spreadsheet import).
+To try the Sunday backup job locally, run `npm run dev`, then open http://127.0.0.1:8787/cdn-cgi/local/scheduled.
 
 ## Login & admin
 
