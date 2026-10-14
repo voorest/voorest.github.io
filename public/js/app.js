@@ -1094,7 +1094,9 @@ async function viewBot() {
     <div class="grid-2 cols-2">
       <section class="card">
         <h2>Status</h2>
-        ${!st.tokenSet ? '<p class="warn-text">TELEGRAM_BOT_TOKEN is not set in Cloudflare.</p>' : connected
+        ${!st.tokenSet ? (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)
+            ? '<p class="muted">Local copy: the bot token lives only in Cloudflare, so the bot works only on the live site. This is expected.</p>'
+            : '<p class="warn-text">TELEGRAM_BOT_TOKEN is not set in Cloudflare.</p>') : connected
           ? `<p><span class="chip win">Connected</span> The bot receives /start, /mystats and group invites.</p>`
           : `<p><span class="chip warn">Not connected</span> Press the button once (on the live site) so the bot can receive commands.</p>`}
         ${st.webhook && st.webhook.lastError ? `<p class="muted small">Last Telegram error: ${h(st.webhook.lastError)}</p>` : ''}
