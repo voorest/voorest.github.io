@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.4.0",
   "description": "Mafia BCN game log: games, stats and titles for our weekend Mafia games",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "wrangler dev",
     "dev:cron": "wrangler dev --test-scheduled",
@@ -13,6 +17,5 @@
   },
   "devDependencies": {
     "wrangler": "^4.36.0"
-  },
-  "type": "module"
+  }
 }
