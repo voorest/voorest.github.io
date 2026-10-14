@@ -333,3 +333,4 @@ body:has(.savebar) main { padding-bottom: 7rem; }
 body:has(.savebar) #toast { bottom: 84px; }
 
 .backup-list { margin-top: .75rem; }
+.grid-2 > .card.wide { grid-column: 1 / -1; }

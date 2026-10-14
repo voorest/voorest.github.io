@@ -905,7 +905,7 @@ function viewData() {
         <p class="muted small">${db.players.length} players · ${db.games.length} games</p>
         <div class="row gap wrap">
           ${Store.isAdmin() ? '<button class="btn primary" id="fullBackup">⬇ Full backup (private, JSON)</button>' : ''}
-          <button class="btn ${Store.isAdmin() ? '' : 'primary'}" id="exportJson">⬇ Public data (JSON)</button>
+          ${Store.isAdmin() ? '' : '<button class="btn primary" id="exportJson">⬇ Download JSON</button>'}
           ${live ? '' : '<label class="btn">⬆ Restore from backup<input type="file" id="importJson" accept=".json,application/json" hidden></label>'}
         </div>
         ${Store.isAdmin() ? '<p class="muted small">The full backup includes private names and Telegram accounts. Keep it in your private <code>data</code> folder.</p>' : ''}
@@ -918,7 +918,7 @@ function viewData() {
           <button class="btn ghost" id="csvComma">CSV (“,”)</button>
         </div>
       </section>
-      ${Store.isAdmin() ? `<section class="card">
+      ${Store.isAdmin() ? `<section class="card wide">
         <h2>Backups in Cloudflare</h2>
         <p class="muted small">Every Sunday at 09:00 (08:00 in winter) a full backup is stored automatically; the last 12 are kept, plus the last 5 manual ones. You get a Telegram message each time.</p>
         <div class="row gap wrap">
@@ -942,7 +942,7 @@ function viewData() {
     if (!res.ok) throw new Error('Backup failed (' + res.status + ')');
     await saveFile(`mafia-bcn-backup-${stamp}.json`, await res.text());
   });
-  $('#exportJson').onclick = () => download(`mafia-bcn-${live ? 'public' : 'local'}-${stamp}.json`, JSON.stringify(Store.get(), null, 2), 'application/json');
+  if ($('#exportJson')) $('#exportJson').onclick = () => download(`mafia-bcn-${live ? 'public' : 'local'}-${stamp}.json`, JSON.stringify(Store.get(), null, 2), 'application/json');
   $('#csvSemi').onclick = () => download(`mafia-bcn-${stamp}.csv`, toCSV(Store.get(), ';'), 'text/csv;charset=utf-8');
   $('#csvComma').onclick = () => download(`mafia-bcn-${stamp}.csv`, toCSV(Store.get(), ','), 'text/csv;charset=utf-8');
   if (Store.isAdmin()) {
@@ -950,9 +950,9 @@ function viewData() {
       const box = $('#backupList');
       const res = await attempt(() => Store.listBackups());
       if (!res || !box) return;
-      box.innerHTML = res.backups.length ? `<table><thead><tr><th>When</th><th>Type</th><th>Games</th><th>Players</th><th>Size</th><th></th></tr></thead><tbody>${res.backups.map(b => `
+      box.innerHTML = res.backups.length ? `<div class="table-wrap"><table><thead><tr><th>When</th><th>Type</th><th>Games</th><th>Players</th><th>Size</th><th></th></tr></thead><tbody>${res.backups.map(b => `
         <tr><td>${h(new Date(b.at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }))}</td><td>${h(b.kind)}</td><td>${b.games}</td><td>${b.players}</td><td>${Math.round(b.size / 1024)} KB</td>
-        <td><button class="btn small" data-dl="${h(b.name)}">⬇ Download</button></td></tr>`).join('')}</tbody></table>`
+        <td class="actions"><button class="btn small" data-dl="${h(b.name)}">⬇ Download</button></td></tr>`).join('')}</tbody></table></div>`
         : '<p class="muted small">No backups yet — the first weekly one runs on Sunday, or press “Back up now”.</p>';
       $$('[data-dl]').forEach(btn => btn.onclick = () => attempt(async () => {
         const r = await fetch('/api/admin/backups/' + encodeURIComponent(btn.dataset.dl), { credentials: 'same-origin' });
