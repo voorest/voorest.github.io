@@ -83,4 +83,5 @@ expect from the roles a player got (mafia wins less often than citizens in our g
 - [x] Personal "My stats" page
 - [x] Public data cached in KV + browser copy with version check; throttling and rate limits
 - [x] Weekly backups to KV (Sundays) with Telegram reports to admins
-- [ ] Publish game summaries to the Telegram group, announcements, Mini App
+- [x] Bot page: posts to the group / subscribers with edit & delete, game summaries, /mystats
+- [ ] Game sign-up polls, Mini App

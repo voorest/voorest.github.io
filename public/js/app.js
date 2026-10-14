@@ -129,10 +129,11 @@ function route() {
   // Data and Settings are for the admin only (in local mode they stay available for editing).
   const adminPages = Store.canEdit();
   document.querySelectorAll('#nav [data-admin]').forEach(a => { a.hidden = !adminPages; });
-  if (!adminPages && (view === 'data' || view === 'settings')) { location.replace('#/dashboard'); return; }
+  document.querySelectorAll('#nav [data-admin-live]').forEach(a => { a.hidden = !Store.isAdmin(); });
+  if ((!adminPages && (view === 'data' || view === 'settings')) || (view === 'bot' && !Store.isAdmin())) { location.replace('#/dashboard'); return; }
   const views = {
     dashboard: viewDashboard, games: viewGames, game: () => viewGame(id),
-    players: viewPlayers, player: () => viewPlayer(id), data: viewData, settings: viewSettings,
+    players: viewPlayers, player: () => viewPlayer(id), data: viewData, settings: viewSettings, bot: viewBot,
     me: () => { const u = Store.user(); if (u && u.playerId) viewPlayer(u.playerId); else viewDashboard(); },
     'login-error': () => { $app.innerHTML = `<div class="empty"><h2>Login didn't work</h2><p>${h(decodeURIComponent(id || ''))}</p><p><a class="btn" href="/api/auth/telegram/start">Try again</a></p></div>`; },
   };
@@ -461,6 +462,7 @@ function viewGame(id) {
         <div class="row gap wrap">${winnerChip(g.winner)}${imported ? '<span class="chip muted">imported from spreadsheet</span>' : ''}</div>
       </div>
       ${ro ? '' : `<div class="row gap wrap">
+        ${Store.isAdmin() && orig.winner ? '<button class="btn" id="publishBtn" title="Prepare a summary post for the Telegram group">📣 Publish to Telegram</button>' : ''}
         <label class="field inline"><span>Date</span><input type="date" data-act="date" value="${g.date}"></label>
         <label class="field inline"><span>Game #</span><input type="number" min="1" data-act="number" value="${g.number}" class="num-input"></label>
         <button class="btn danger" data-act="del-game">Delete</button>
@@ -594,6 +596,11 @@ function viewGame(id) {
     el.addEventListener(evt, () => handle(el.dataset.act, el));
   });
   $('#qaName').addEventListener('keydown', e => { if (e.key === 'Enter') handle('quick-add', e.target); });
+  if ($('#publishBtn')) $('#publishBtn').onclick = () => {
+    if (gameDirty()) { toast('Save your changes first'); return; }
+    UI.botDraft = { text: gameSummaryText(orig), kind: 'game', gameId: orig.id, audience: 'group' };
+    location.hash = '#/bot';
+  };
   $$('textarea[data-act="notes"], input[data-act="nom-votes"]').forEach(el => el.addEventListener('input', () => handle(el.dataset.act, el)));
 }
 
@@ -1040,6 +1047,181 @@ function viewSettings() {
     if (!confirm(`Save settings?\n\nK = ${patch.priorWeight}, min games for King = ${patch.minGames}, seats in a new game = ${patch.defaultSeats}`)) return;
     attempt(async () => { await Store.saveSettings(patch); toast('Settings saved'); viewSettings(); });
   };
+}
+
+/* ============================================================
+   BOT — posts to the Telegram group / subscribers, history with edit & delete
+   ============================================================ */
+function gameSummaryText(g) {
+  const tl = GameLogic.timeline(g);
+  const lines = g.seats.filter(s => s.playerId).map(s => {
+    const out = !tl.alive.includes(s.seat);
+    return `${s.seat}. ${Store.playerName(s.playerId)} — ${s.role ? ROLES[s.role].label : '?'}${out ? '' : ' ✅'}`;
+  });
+  return [
+    `🎲 Game #${g.number} · ${fmtDate(g.date)} (overall #${Store.overallNumber(g)})`,
+    g.winner ? (g.winner === 'town' ? '🏆 Citizens won!' : '🏆 Mafia won!') : '',
+    '',
+    'Seats and roles (✅ = alive at the end):',
+    ...lines,
+    '',
+    `Details and stats: ${location.origin}/#/game/${g.id}`,
+  ].join('\n');
+}
+
+const BOT_TEMPLATES = {
+  mystats: () => `📊 New: your personal stats in our bot!\n\n1. Open @mafia_bcn_bot and press Start\n2. Send /mystats — you get your games, wins, rating and rank\n\nIf the bot says you are not linked yet, write to me (@voorest) and I will connect your Telegram to your player.\n\n🌐 ${location.origin}`,
+  game: () => `🎭 Mafia BCN — this Sunday at 19:00\n📍 Place: …\n\nWho is in? Reply here 👇`,
+  update: () => `🆕 Site update\n\n• …\n\n🌐 ${location.origin}`,
+};
+
+async function viewBot() {
+  $app.innerHTML = '<div class="empty">Loading bot…</div>';
+  const st = await attempt(() => Store.bot.state());
+  if (!st) { $app.innerHTML = '<div class="empty">Could not load the bot status.</div>'; return; }
+  const connected = st.webhook && st.webhook.url === st.expectedUrl;
+  const groups = st.chats.filter(c => c.type !== 'private' && c.status === 'active');
+  const people = st.chats.filter(c => c.type === 'private');
+  const activePeople = people.filter(c => c.status === 'active');
+  const draft = UI.botDraft || {};
+  const fmtWhen = t => t ? new Date(t.replace(' ', 'T') + 'Z').toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '';
+  const age = t => (Date.now() - new Date(t.replace(' ', 'T') + 'Z').getTime()) / 3600e3;
+  const audienceLabel = p => ({ group: 'Group', subscribers: 'Subscribers', admins: 'Admins' }[p.audience] || p.audience);
+
+  $app.innerHTML = `
+    <div class="page-head"><h1>Bot <span class="muted">@mafia_bcn_bot</span></h1></div>
+
+    <div class="grid-2 cols-2">
+      <section class="card">
+        <h2>Status</h2>
+        ${!st.tokenSet ? '<p class="warn-text">TELEGRAM_BOT_TOKEN is not set in Cloudflare.</p>' : connected
+          ? `<p><span class="chip win">Connected</span> The bot receives /start, /mystats and group invites.</p>`
+          : `<p><span class="chip warn">Not connected</span> Press the button once (on the live site) so the bot can receive commands.</p>`}
+        ${st.webhook && st.webhook.lastError ? `<p class="muted small">Last Telegram error: ${h(st.webhook.lastError)}</p>` : ''}
+        <div class="row gap wrap"><button class="btn ${connected ? 'ghost' : 'primary'}" id="botSetup">${connected ? 'Reconnect' : 'Connect bot'}</button></div>
+        <h3 class="mt">Groups</h3>
+        ${groups.length ? groups.map(c => `<div class="row gap"><span class="chip">${h(c.title || c.chat_id)}</span><span class="muted small">${c.type}</span></div>`).join('')
+          : '<p class="muted small">Not in any group yet. In Telegram open your group → Add members → search <b>@mafia_bcn_bot</b> → add. It then appears here (the bot must be connected first).</p>'}
+      </section>
+
+      <section class="card">
+        <h2>Who receives messages <span class="muted">· ${activePeople.length}</span></h2>
+        <p class="muted small">Only people who pressed <b>Start</b> in the bot. Linked players can use /mystats.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Telegram</th><th>Player</th><th>Since</th><th></th></tr></thead>
+          <tbody>${people.map(c => `<tr class="${c.status === 'active' ? '' : 'dead'}">
+            <td>${h(c.title || '')} ${c.username ? `<span class="muted">@${h(c.username)}</span>` : ''}</td>
+            <td>${c.nickname ? h(c.nickname) : '<a href="#/players" class="muted small">not linked</a>'}${c.role === 'admin' ? ' <span class="chip admin">admin</span>' : ''}</td>
+            <td class="muted small">${h((c.started_at || '').slice(0, 10))}</td>
+            <td class="muted small">${c.status === 'active' ? '' : 'stopped'}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Nobody yet.</td></tr>'}</tbody>
+        </table></div>
+      </section>
+
+      <section class="card wide">
+        <h2>New post</h2>
+        <div class="row gap wrap">
+          <label class="field"><span>Send to</span>
+            <select id="botAudience">
+              ${groups.map(c => `<option value="group:${h(c.chat_id)}" ${draft.audience === 'group' ? 'selected' : ''}>Group: ${h(c.title || c.chat_id)}</option>`).join('')}
+              <option value="subscribers" ${draft.audience === 'subscribers' ? 'selected' : ''}>Everyone who started the bot (${activePeople.length})</option>
+              <option value="admins" ${draft.audience === 'admins' ? 'selected' : ''}>Admins only (test)</option>
+            </select>
+          </label>
+          <label class="field"><span>Type</span>
+            <select id="botKind">
+              ${['announcement', 'game', 'update'].map(k => `<option value="${k}" ${draft.kind === k ? 'selected' : ''}>${{ announcement: 'Announcement', game: 'Game summary', update: 'Update' }[k]}</option>`).join('')}
+            </select>
+          </label>
+          <div class="field"><span>Templates</span>
+            <div class="row gap wrap">
+              <button class="btn small ghost" data-tpl="mystats">/mystats how-to</button>
+              <button class="btn small ghost" data-tpl="game">Game night</button>
+              <button class="btn small ghost" data-tpl="update">Site update</button>
+            </div>
+          </div>
+        </div>
+        <textarea id="botText" rows="9" maxlength="4000" placeholder="Write your message… (plain text, emojis welcome)">${h(draft.text || '')}</textarea>
+        <div class="row gap wrap"><span class="muted small" id="botCount"></span><span class="spacer"></span><button class="btn primary" id="botSend">Send</button></div>
+      </section>
+    </div>
+
+    <h2 class="section-title">History <span class="muted small">newest first</span></h2>
+    ${st.posts.length ? st.posts.map(p => {
+      const old = age(p.created_at) > 48;
+      return `<section class="card post ${p.deleted_at ? 'deleted' : ''}" data-post="${p.id}">
+        <div class="row gap wrap post-head">
+          <b>${fmtWhen(p.created_at)}</b>
+          <span class="chip">${audienceLabel(p)}</span>
+          <span class="chip muted">${h(p.kind)}</span>
+          ${p.deleted_at ? '<span class="chip loss">deleted</span>' : ''}
+          ${p.edited_at ? `<span class="muted small">edited ${fmtWhen(p.edited_at)}</span>` : ''}
+          <span class="spacer"></span>
+          <span class="muted small">✓ ${p.sent} sent${p.failed ? ` · ✗ ${p.failed} failed` : ''}${p.pending ? ` · ${p.pending} waiting` : ''}${p.deleted ? ` · 🗑 ${p.deleted}` : ''}</span>
+        </div>
+        <div class="post-text">${h(p.text)}</div>
+        ${p.errors ? `<p class="muted small warn-text">${h(p.errors)}</p>` : ''}
+        ${p.deleted_at ? '' : `<div class="row gap">
+          ${p.pending ? `<button class="btn small" data-continue="${p.id}">Continue sending</button>` : ''}
+          <button class="btn small ghost" data-edit-post="${p.id}">Edit</button>
+          <button class="btn small ghost danger-text" data-del-post="${p.id}" ${old ? 'title="Telegram only allows deleting messages within 48 hours — it will be removed from this list, but may stay in Telegram"' : ''}>Delete${old ? ' (older than 48 h)' : ''}</button>
+        </div>`}
+      </section>`;
+    }).join('') : '<div class="card muted">Nothing sent yet.</div>'}
+  `;
+
+  const text = $('#botText');
+  const count = () => { $('#botCount').textContent = `${text.value.length} / 4000`; };
+  text.oninput = count; count();
+  $$('[data-tpl]').forEach(b => b.onclick = () => {
+    if (text.value.trim() && !confirm('Replace the current text with the template?')) return;
+    text.value = BOT_TEMPLATES[b.dataset.tpl](); count();
+    $('#botKind').value = b.dataset.tpl === 'update' || b.dataset.tpl === 'mystats' ? 'update' : 'announcement';
+  });
+  $('#botSetup').onclick = () => attempt(async () => { await Store.bot.setup(); toast('Bot connected'); viewBot(); });
+
+  // send in batches until done
+  const drain = async (id, label) => {
+    let r = { remaining: 1 }, guard = 0;
+    while (r.remaining > 0 && guard++ < 50) { r = await Store.bot.process(id); if (r.remaining) toast(`${label}… ${r.remaining} left`); }
+  };
+  $('#botSend').onclick = () => attempt(async () => {
+    const val = $('#botAudience').value;
+    if (!val) throw new Error('Choose who receives it');
+    const [audience, chatId] = val.startsWith('group:') ? ['group', val.slice(6)] : [val, null];
+    const who = audience === 'group' ? $('#botAudience').selectedOptions[0].textContent : audience === 'subscribers' ? `${activePeople.length} people who started the bot` : 'admins only';
+    if (!text.value.trim()) throw new Error('The message is empty');
+    if (!confirm(`Send this message to ${who}?`)) return;
+    $('#botSend').disabled = true;
+    const r = await Store.bot.send({ text: text.value, audience, chatId, kind: $('#botKind').value, gameId: draft.gameId || null });
+    if (r.remaining) await drain(r.id, 'Sending');
+    UI.botDraft = null;
+    toast('Sent');
+    viewBot();
+  }).finally(() => { if ($('#botSend')) $('#botSend').disabled = false; });
+
+  $$('[data-continue]').forEach(b => b.onclick = () => attempt(async () => { await drain(+b.dataset.continue, 'Sending'); viewBot(); }));
+  $$('[data-edit-post]').forEach(b => b.onclick = () => {
+    const card = b.closest('.post');
+    const p = st.posts.find(x => x.id === +b.dataset.editPost);
+    card.querySelector('.post-text').outerHTML = `<textarea class="post-edit" rows="7" maxlength="4000">${h(p.text)}</textarea>`;
+    b.outerHTML = `<button class="btn small primary" data-save-post="${p.id}">Save edit</button>`;
+    card.querySelector('[data-save-post]').onclick = () => attempt(async () => {
+      const t = card.querySelector('.post-edit').value;
+      if (!confirm(`Update this message in Telegram (${p.sent} chat${p.sent === 1 ? '' : 's'})?`)) return;
+      const r = await Store.bot.edit(p.id, t);
+      if (r.remaining) await drain(p.id, 'Updating');
+      toast('Updated');
+      viewBot();
+    });
+  });
+  $$('[data-del-post]').forEach(b => b.onclick = () => attempt(async () => {
+    const p = st.posts.find(x => x.id === +b.dataset.delPost);
+    if (!confirm(`Delete this message from Telegram (${p.sent} chat${p.sent === 1 ? '' : 's'})?`)) return;
+    const r = await Store.bot.remove(p.id);
+    if (r.remaining) await drain(p.id, 'Deleting');
+    toast('Deleted');
+    viewBot();
+  }));
 }
 
 /* ---------- start ---------- */

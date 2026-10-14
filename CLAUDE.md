@@ -56,6 +56,17 @@ Sessions are stored in D1 as SHA-256 hashes; the cookie is HttpOnly.
 - D1 also has 7-day point-in-time restore. The admin downloads a copy into `data/` from time to time.
 - Telegram messages go **only to admin accounts** that pressed Start in @mafia_bcn_bot: backup report, error alerts (max 1/hour). The Bot API is free.
 
+## Telegram bot (@mafia_bcn_bot, `src/bot.js`)
+- Webhook `POST /api/telegram/webhook`. Its secret is derived from the bot token, so there is nothing extra to configure. Connect it once from the live site: Bot page → "Connect bot".
+- Commands: `/start` (subscribe + auto-link by the @username the admin pre-filled), `/mystats` (only for linked players), `/help`, `/stop`.
+- **Only people who pressed Start receive messages.** The bot is added to the group by hand and remembered via `my_chat_member`.
+- Bot page (admin, live only):
+  - status, groups, subscribers with the linked player;
+  - compose to Group / Subscribers / Admins, with templates;
+  - history newest first, with Edit (any time) and Delete (Telegram: within 48 h).
+- Game page: "📣 Publish to Telegram" pre-fills a game summary.
+- Tables: `bot_chats`, `bot_posts`, `bot_post_messages` (message_id per chat, needed for edit/delete). Sends go out in batches of 40 per request (free plan allows 50 outgoing requests).
+
 ## Ratings (fair comparison, may be tuned)
 - `rating = (wins + K·avg) / (games + K)`, K = 5 (Settings).
 - Role ratings use each role's own average.
@@ -63,6 +74,6 @@ Sessions are stored in D1 as SHA-256 hashes; the cookie is HttpOnly.
 - Titles: King (best rating, min games), Best Role Player (above average in 3+ roles), Best Sheriff/Don/Mafia/Citizen/Doctor/Maniac, Sharp Eye, Survivor, Most Loyal, Night Target.
 
 ## Ideas / next
-- Bot: publish a game summary to the group, editable or deletable via the stored message_id; game announcements and sign-up; `/mystats`; open the site as a Telegram Mini App.
+- Bot: game sign-up polls, weekly/monthly summaries, open the site as a Telegram Mini App.
 - Settings that are still open: rating formula details, which titles to keep.
 - Logo images (owner-made) are kept privately in `data/` (tg-logo-full.jpg, tg-logo-bot-full.jpg).

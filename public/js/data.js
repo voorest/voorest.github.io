@@ -305,6 +305,14 @@ const Store = (() => {
   const listBackups = () => api('/api/admin/backups');
   const backupNow = () => api('/api/admin/backups', { method: 'POST', body: {} });
   const notifyTest = () => api('/api/admin/notify-test', { method: 'POST', body: {} });
+  const bot = {
+    state: () => api('/api/admin/bot'),
+    setup: () => api('/api/admin/bot/setup', { method: 'POST', body: {} }),
+    send: post => api('/api/admin/bot/posts', { method: 'POST', body: post }),
+    process: id => api(`/api/admin/bot/posts/${id}/process`, { method: 'POST', body: {} }),
+    edit: (id, text) => api(`/api/admin/bot/posts/${id}`, { method: 'PUT', body: { text } }),
+    remove: id => api(`/api/admin/bot/posts/${id}`, { method: 'DELETE' }),
+  };
 
   async function logout() {
     try { localStorage.removeItem(CACHE_KEY); } catch (e) { /* ignore */ }
@@ -317,7 +325,7 @@ const Store = (() => {
     onSaveState, replace, clear, saveLocal, logout,
     addPlayer, updatePlayer, deletePlayer, updateAccount, playerInUse, player, playerName,
     newGame, saveGame, game, deleteGame, sortedGames, overallNumber, saveSettings,
-    listBackups, backupNow, notifyTest,
+    listBackups, backupNow, notifyTest, bot,
   };
 })();
 

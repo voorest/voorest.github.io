@@ -25,6 +25,14 @@
  *   POST   /api/admin/backups          make a backup now
  *   GET    /api/admin/backups/:name    download a stored backup
  *   POST   /api/admin/notify-test      send a test message to admins' Telegram
+ *   GET    /api/admin/bot              bot status, chats (subscribers + groups), post history
+ *   POST   /api/admin/bot/setup        connect the webhook + commands (run once from the live site)
+ *   POST   /api/admin/bot/posts        send a post { text, audience: group|subscribers|admins, chatId?, kind?, gameId? }
+ *   POST   /api/admin/bot/posts/:id/process   continue sending (40 per call)
+ *   PUT    /api/admin/bot/posts/:id    edit a sent post { text }
+ *   DELETE /api/admin/bot/posts/:id    delete a sent post (Telegram: within 48 h)
+ * Telegram → us:
+ *   POST   /api/telegram/webhook       bot updates (/start, /mystats, /help, /stop, added to groups) — see src/bot.js
  *
  * Scheduled: every Sunday 07:00 UTC → full backup into KV (keep 12) + Telegram report to admins.
  *
@@ -32,6 +40,8 @@
  *   TELEGRAM_CLIENT_ID, TELEGRAM_CLIENT_SECRET   from @BotFather → Login Widget
  *   TELEGRAM_BOT_TOKEN                           from @BotFather (bot messages, later)
  */
+
+import { BotError, handleWebhook, botState, botSetup, createPost, processPost, editPost, deletePost } from './bot.js';
 
 const ROLES = ['citizen', 'sheriff', 'doctor', 'maniac', 'mafia', 'don'];
 const NIGHT_KINDS = { mafiaKill: 'mafia_kill', donCheck: 'don_check', sheriffCheck: 'sheriff_check', maniacKill: 'maniac_kill', doctorHeal: 'doctor_heal' };
@@ -564,7 +574,7 @@ const esc = t => String(t).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', 
 
 async function notifyAdmins(env, html) {
   if (!env.TELEGRAM_BOT_TOKEN) return [{ ok: false, error: 'TELEGRAM_BOT_TOKEN is not set' }];
-  const { results } = await env.DB.prepare("SELECT provider_uid, username FROM accounts WHERE role = 'admin' AND provider = 'telegram' AND provider_uid IS NOT NULL").all();
+  const { results } = await env.DB.prepare("SELECT provider_uid, username FROM accounts WHERE role = 'admin' AND provider = 'telegram' AND provider_uid IS NOT NULL AND provider_uid != 'dev-admin'").all();
   const out = [];
   for (const a of results) {
     const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -615,6 +625,12 @@ async function api(request, env, url) {
 
   if (path === '/api/data' && method === 'GET') return dataEndpoint(request, env, url);
   if (path === '/api/health') return json({ ok: true });
+  if (path === '/api/telegram/webhook' && method === 'POST') {
+    return handleWebhook(request, env, {
+      origin: url.origin,
+      publicData: async () => JSON.parse((await publicSnapshot(env)).body),
+    });
+  }
   if (path === '/api/me' && method === 'GET') return json(meFor(await currentUser(request, env), env, url));
   if (path === '/api/auth/dev-login' && method === 'GET') return devLogin(env, url);
   if (path === '/api/auth/telegram/start' && method === 'GET') {
@@ -638,6 +654,13 @@ async function api(request, env, url) {
       if (!value) throw new HttpError(404, 'Backup not found');
       return new Response(value, { headers: { 'content-type': 'application/json; charset=utf-8', 'content-disposition': `attachment; filename="mafia-bcn-backup-${bm[1]}.json"`, 'cache-control': 'no-store' } });
     }
+    if (path === '/api/admin/bot' && method === 'GET') return json(await botState(env, url.origin));
+    if (path === '/api/admin/bot/setup' && method === 'POST') { await botSetup(env, url); return json(await botState(env, url.origin)); }
+    if (path === '/api/admin/bot/posts' && method === 'POST') return json(await createPost(env, admin, await readBody(request)), 201);
+    const pm = path.match(/^\/api\/admin\/bot\/posts\/(\d+)(\/process)?$/);
+    if (pm && method === 'POST' && pm[2]) return json(await processPost(env, +pm[1]));
+    if (pm && method === 'PUT' && !pm[2]) return json(await editPost(env, +pm[1], await readBody(request)));
+    if (pm && method === 'DELETE' && !pm[2]) return json(await deletePost(env, +pm[1]));
     if (path === '/api/admin/notify-test' && method === 'POST') {
       return json({ results: await notifyAdmins(env, `👋 Test message from <b>Mafia BCN</b>. Backup reports and alerts will arrive here.`) });
     }
@@ -686,6 +709,7 @@ export default {
         return await api(request, env, url);
       } catch (err) {
         if (err instanceof HttpError) return json({ error: err.message }, err.status);
+        if (err instanceof BotError) return json({ error: err.message }, err.httpStatus);
         console.error(err);
         if (/no such table/i.test(String(err.message)) && ['localhost', '127.0.0.1'].includes(url.hostname)) {
           return json({ error: 'Local database is empty — stop the server and run: npm run seed:local' }, 500);
