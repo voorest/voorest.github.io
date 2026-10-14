@@ -687,6 +687,9 @@ export default {
       } catch (err) {
         if (err instanceof HttpError) return json({ error: err.message }, err.status);
         console.error(err);
+        if (/no such table/i.test(String(err.message)) && ['localhost', '127.0.0.1'].includes(url.hostname)) {
+          return json({ error: 'Local database is empty — stop the server and run: npm run seed:local' }, 500);
+        }
         if (ctx) ctx.waitUntil(alertAdmins(env, `${request.method} ${url.pathname}: ${err.message || err}`));
         return json({ error: 'Server error' }, 500);
       }
