@@ -334,3 +334,4 @@ body:has(.savebar) #toast { bottom: 84px; }
 
 .backup-list { margin-top: .75rem; }
 .grid-2 > .card.wide { grid-column: 1 / -1; }
+.grid-2.cols-2 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }

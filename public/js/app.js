@@ -899,7 +899,7 @@ function viewData() {
     <div class="page-head"><h1>Data</h1></div>
     ${live ? `<div class="callout">Live site: data comes from the database${Store.isAdmin() ? ' — you are admin, so you can edit games and players and download a full backup.' : '. Downloads contain public data only (nicknames).'}</div>`
            : `<div class="callout">Local mode: data is stored <b>in this browser only</b>. Download a backup after every game night.</div>`}
-    <div class="grid-2">
+    <div class="grid-2 cols-2">
       <section class="card">
         <h2>Backup</h2>
         <p class="muted small">${db.players.length} players · ${db.games.length} games</p>
