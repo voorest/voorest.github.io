@@ -32,8 +32,8 @@ Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (do
 - A doctor heal cancels a shot on the same seat.
 - Imported spreadsheet games (`source='xls'`) have no night notes. Their "alive at end" is stored per seat and trusted; for app games it is computed.
 - Games are numbered per day (`number`) and shown with an **overall #** (running order across all games).
-- **No database ids in the UI.** Addresses: games `#/game/DD-MM-YYYY/N` (date + game # of the day), players `#/player/<No.>`. Old `#/game/<id>` links are rewritten.
-- **New game = browser-only draft** (`#/game/new`) until the first "Save changes", which POSTs the whole game (create + save in one request). Leaving or Discard drops it.
+- **No database ids in the UI.** Plain addresses (History API, no `#`): games `/game/DD-MM-YYYY/N` (date + game # of the day), players `/player/<No.>`, plus `/games`, `/players`, `/bot` and so on. The Worker serves index.html for any path without a file extension. Old `/#/…` links and `#/game/<id>` links are converted on load.
+- **New game = browser-only draft** (`/game/new`) until the first "Save changes", which POSTs the whole game (create + save in one request). Leaving or Discard drops it.
 - Game days are Sundays; history imported from `Mafia_stats_v2.xlsx` (14 games, 1 Mar to 3 May 2026). The sheet had day/month swaps, which are fixed.
 
 ## People & privacy

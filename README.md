@@ -19,9 +19,8 @@ GitHub (this repo)  ──push to master──▶  Cloudflare Workers Builds  �
 - `data/`: **private** files (spreadsheets, backups, generated SQL). They're ignored by git, so they never reach this public repo.
 - `wrangler.jsonc`: Cloudflare config (Worker name, database binding)
 
-The website has two modes:
-- **Live** (on Cloudflare): reads from the database. Read-only until the admin login is added.
-- **Local** (opening `public/index.html` directly, or on GitHub Pages): data stays in your browser. You can edit it, and it has a demo data button.
+Pages have plain addresses (`/games`, `/game/17-05-2026/1`, `/player/27`); the Worker serves `index.html` for all of them.
+To run it on your computer use `npm run dev` (see below). Opening `public/index.html` directly no longer works.
 
 ## Branches and deploys
 

@@ -1,6 +1,7 @@
 /* ============================================================
    UI — tiny hash router + views
-   #/dashboard  #/games  #/game/:id  #/players  #/player/:id  #/data  #/settings  #/me
+   /dashboard  /games  /game/DD-MM-YYYY/N  /game/new  /players  /player/:no  /data  /settings  /bot  /me
+   Plain paths (History API); old #/… links are converted on load.
    ============================================================ */
 'use strict';
 
@@ -54,11 +55,11 @@ function wireDateFields(root) {
   });
 }
 /* Addresses use our own numbers, never database ids:
-   games  #/game/17-05-2026/1  (date + game number of that day), players  #/player/27  (player No.) */
-const gameHref = g => (g.id === 'new' ? '#/game/new' : `#/game/${isoToDmy(g.date).replace(/\//g, '-')}/${g.number}`);
+   games  /game/17-05-2026/1  (date + game number of that day), players  /player/27  (player No.) */
+const gameHref = g => (g.id === 'new' ? '/game/new' : `/game/${isoToDmy(g.date).replace(/\//g, '-')}/${g.number}`);
 const playerHref = pOrId => {
   const p = typeof pOrId === 'object' && pOrId ? pOrId : Store.player(pOrId);
-  return `#/player/${p && p.number ? p.number : pOrId}`;
+  return `/player/${p && p.number ? p.number : pOrId}`;
 };
 function toast(msg) {
   const t = document.getElementById('toast');
@@ -133,7 +134,7 @@ function renderAuth() {
   } else if (Store.devLogin()) {
     el.innerHTML = `<a class="btn small" href="/api/auth/dev-login">Dev login (local admin)</a>`;
   } else if (Store.loginAvailable()) {
-    el.innerHTML = `<a class="btn small tg" href="/api/auth/telegram/start?back=${encodeURIComponent('/' + (location.hash || ''))}">Log in with Telegram</a>`;
+    el.innerHTML = `<a class="btn small tg" href="/api/auth/telegram/start?back=${encodeURIComponent(location.pathname)}">Log in with Telegram</a>`;
   } else {
     el.innerHTML = '';
   }
@@ -149,13 +150,13 @@ Store.onSaveState((s, msg) => {
 
 /* ---------- router ---------- */
 function route() {
-  const parts = (location.hash || '#/dashboard').replace(/^#\/?/, '').split('/');
+  const parts = location.pathname.replace(/^\/+|\/+$/g, '').replace(/^index\.html$/, '').split('/').map(decodeURIComponent);
   const view = parts[0] || 'dashboard';
   let id = parts[1];
   if (view === 'game' && id && id !== 'new') {
     const iso = /^\d{2}-\d{2}-\d{4}$/.test(id) ? dmyToIso(id.replace(/-/g, '/')) : null;
     const g = iso ? Store.gameByDay(iso, parts[2]) : Store.game(id); // old links used the database id
-    if (g && !iso) { history.replaceState(null, '', gameHref(g)); currentHash = location.hash; }
+    if (g && !iso) { history.replaceState(null, '', gameHref(g)); currentPath = location.pathname; }
     id = g ? g.id : '-';
   }
   if (view === 'player' && id) { const p = Store.playerByNumber(id); id = p ? p.id : '-'; }
@@ -178,7 +179,7 @@ function route() {
   const adminPages = Store.canEdit();
   document.querySelectorAll('#nav [data-admin]').forEach(a => { a.hidden = !adminPages; });
   document.querySelectorAll('#nav [data-admin-live]').forEach(a => { a.hidden = !Store.isAdmin(); });
-  if ((!adminPages && (view === 'data' || view === 'settings')) || (view === 'bot' && !Store.isAdmin())) { location.replace('#/dashboard'); return; }
+  if ((!adminPages && (view === 'data' || view === 'settings')) || (view === 'bot' && !Store.isAdmin())) { go('/dashboard', { replace: true }); return; }
   const views = {
     dashboard: viewDashboard, games: viewGames, game: () => viewGame(id),
     players: viewPlayers, player: () => viewPlayer(id), data: viewData, settings: viewSettings, bot: viewBot,
@@ -187,21 +188,36 @@ function route() {
   };
   (views[view] || viewDashboard)();
 }
-let currentHash = location.hash;
-window.addEventListener('hashchange', () => {
-  if (UI.skipHash) { UI.skipHash = false; return; }
-  const stillHere = UI.draft && location.hash === UI.draft.hash;
-  if (!stillHere && gameDirty()) {
-    if (!confirm(UI.draft.id === 'new' ? 'This new game is not saved yet. Leave and discard it?' : 'You have unsaved changes in this game. Leave without saving?')) {
-      UI.skipHash = true;
-      location.hash = currentHash;
-      return;
-    }
-  }
-  if (!stillHere) { UI.draft = null; renderSaveBar(); }
-  currentHash = location.hash;
+let currentPath = location.pathname;
+/** Leaving a game with unsaved changes asks first. Returns false if the person wants to stay. */
+function confirmLeave(path) {
+  const stillHere = UI.draft && path === UI.draft.path;
+  if (!stillHere && gameDirty() && !confirm(UI.draft.id === 'new' ? 'This new game is not saved yet. Leave and discard it?' : 'You have unsaved changes in this game. Leave without saving?')) return false;
+  if (!stillHere && UI.draft) { UI.draft = null; renderSaveBar(); }
+  return true;
+}
+/** In-app navigation without reloading the page. */
+function go(path, { replace = false } = {}) {
+  if (path !== location.pathname && !confirmLeave(path)) return;
+  history[replace ? 'replaceState' : 'pushState'](null, '', path);
+  currentPath = location.pathname;
   route();
-  window.scrollTo(0, 0);
+  if (!replace) window.scrollTo(0, 0);
+}
+// Internal links (<a href="/...">) are handled here instead of reloading the page
+document.addEventListener('click', e => {
+  const a = e.target.closest('a[href^="/"]');
+  if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || a.target) return;
+  const href = a.getAttribute('href');
+  if (href.startsWith('/api/') || href.startsWith('//')) return;
+  e.preventDefault();
+  go(href);
+});
+window.addEventListener('popstate', () => {
+  if (location.pathname === currentPath) return;
+  if (!confirmLeave(location.pathname)) { history.pushState(null, '', currentPath); return; }
+  currentPath = location.pathname;
+  route();
 });
 window.addEventListener('beforeunload', e => { if (gameDirty()) { e.preventDefault(); e.returnValue = ''; } });
 
@@ -233,7 +249,7 @@ function viewDashboard() {
         <h1>Mafia BCN game log</h1>
         <p>No finished games yet.</p>
         ${Store.canEdit() ? `<div class="row gap wrap">
-          <a class="btn primary" href="#/games">Record a game</a>
+          <a class="btn primary" href="/games">Record a game</a>
           ${Store.isLive() ? '' : '<button class="btn ghost" id="demoBtn">Load demo data</button>'}
         </div>` : ''}
       </section>`;
@@ -254,7 +270,7 @@ function viewDashboard() {
   const recent = Store.sortedGames().filter(g => g.winner).slice(0, 6);
 
   $app.innerHTML = `
-    <div class="page-head"><h1>Dashboard</h1>${Store.canEdit() ? '<a class="btn primary" href="#/games">+ Record a game</a>' : ''}</div>
+    <div class="page-head"><h1>Dashboard</h1>${Store.canEdit() ? '<a class="btn primary" href="/games">+ Record a game</a>' : ''}</div>
 
     <section class="kpis">
       <div class="kpi"><span class="kpi-val">${T.games}</span><span class="kpi-lbl">Games played</span></div>
@@ -390,8 +406,8 @@ function viewGames() {
     if (!date) { toast('Enter the date as DD/MM/YYYY'); $('#newDate').focus(); return; }
     // Nothing is stored yet: the game is created on its first "Save changes"
     const g = Store.draftGame(date, +$('#newSeats').value);
-    UI.draft = { id: 'new', g, base: JSON.stringify(g), hash: '#/game/new' };
-    location.hash = '#/game/new';
+    UI.draft = { id: 'new', g, base: JSON.stringify(g), path: '/game/new' };
+    go('/game/new');
   }).finally(() => { if ($('#newGame')) $('#newGame').disabled = false; });
 }
 
@@ -401,10 +417,10 @@ function viewGames() {
 function viewGame(id) {
   const isNew = id === 'new';
   const orig = isNew ? (UI.draft && UI.draft.id === 'new' && Store.canEdit() ? UI.draft.g : null) : Store.game(id);
-  if (!orig) { $app.innerHTML = `<div class="empty">Game not found. <a href="#/games">Back to games</a></div>`; return; }
+  if (!orig) { $app.innerHTML = `<div class="empty">Game not found. <a href="/games">Back to games</a></div>`; return; }
   const ro = !Store.canEdit();
   // Editing works on a draft copy; nothing is stored until "Save changes".
-  if (!ro && (!UI.draft || UI.draft.id !== orig.id)) UI.draft = { id: orig.id, g: JSON.parse(JSON.stringify(orig)), base: JSON.stringify(orig), hash: location.hash };
+  if (!ro && (!UI.draft || UI.draft.id !== orig.id)) UI.draft = { id: orig.id, g: JSON.parse(JSON.stringify(orig)), base: JSON.stringify(orig), path: location.pathname };
   const g = ro ? orig : UI.draft.g;
   const dis = ro ? 'disabled' : '';
   const db = Store.get();
@@ -511,7 +527,7 @@ function viewGame(id) {
   $app.innerHTML = `
     <div class="page-head">
       <div>
-        <a href="#/games" class="back">← Games</a>
+        <a href="/games" class="back">← Games</a>
         <h1>Game #${g.number} <span class="muted">· ${fmtDate(g.date)} · overall #${Store.overallNumber(g)}</span></h1>
         <div class="row gap wrap">${isNew ? '<span class="chip warn">New — not saved yet</span>' : winnerChip(g.winner)}${imported ? '<span class="chip muted">imported from spreadsheet</span>' : ''}</div>
       </div>
@@ -645,11 +661,11 @@ function viewGame(id) {
       case 'del-game':
         if (isNew) {
           if (!confirm('Discard this new game? Nothing has been saved yet.')) return;
-          UI.draft = null; renderSaveBar(); location.hash = '#/games';
+          UI.draft = null; renderSaveBar(); go('/games');
           return;
         }
         if (!confirm('Delete this game permanently?')) return;
-        if (await attempt(() => Store.deleteGame(id).then(() => true))) { UI.draft = null; location.hash = '#/games'; }
+        if (await attempt(() => Store.deleteGame(id).then(() => true))) { UI.draft = null; go('/games'); }
         return;
     }
     commit();
@@ -664,7 +680,7 @@ function viewGame(id) {
   if ($('#publishBtn')) $('#publishBtn').onclick = () => {
     if (gameDirty()) { toast('Save your changes first'); return; }
     UI.botDraft = { text: gameSummaryText(orig), kind: 'game', gameId: orig.id, audience: 'group' };
-    location.hash = '#/bot';
+    go('/bot');
   };
   $$('textarea[data-act="notes"], input[data-act="nom-votes"]').forEach(el => el.addEventListener('input', () => handle(el.dataset.act, el)));
 }
@@ -720,7 +736,7 @@ function renderSaveBar() {
     const id = UI.draft.id;
     UI.draft = null;
     renderSaveBar();
-    if (id === 'new') location.hash = '#/games'; else viewGame(id);
+    if (id === 'new') go('/games'); else viewGame(id);
   };
   document.getElementById('saveBtn').onclick = async () => {
     const dg = UI.draft.g;
@@ -738,8 +754,8 @@ function renderSaveBar() {
     if (saved) {
       // The address follows the date and game number (they may have changed, or the game is new)
       const href = gameHref(saved);
-      if (location.hash !== href) { history.replaceState(null, '', href); currentHash = href; }
-      UI.draft = { id: saved.id, g: JSON.parse(JSON.stringify(saved)), base: JSON.stringify(saved), hash: href };
+      if (location.pathname !== href) { history.replaceState(null, '', href); currentPath = href; }
+      UI.draft = { id: saved.id, g: JSON.parse(JSON.stringify(saved)), base: JSON.stringify(saved), path: href };
       toast('Game saved');
       renderSaveBar();
       viewGame(saved.id);
@@ -879,7 +895,7 @@ function viewPlayers() {
 /* ---------- player profile ("My stats") ---------- */
 function viewPlayer(id) {
   const p0 = Store.player(id);
-  if (!p0) { $app.innerHTML = `<div class="empty">Player not found. <a href="#/players">Back</a></div>`; return; }
+  if (!p0) { $app.innerHTML = `<div class="empty">Player not found. <a href="/players">Back</a></div>`; return; }
   const st = Stats.compute(Store.get());
   const p = st.players.find(x => x.id === p0.id);
   const ranked = [...st.players].sort((a, b) => b.rating - a.rating);
@@ -888,7 +904,7 @@ function viewPlayer(id) {
 
   const head = `
     <div class="page-head">
-      <div><a href="#/players" class="back">← Players</a><h1>${h(p0.nickname)} <span class="muted">No. ${p0.number}</span>${mine ? ' <span class="chip win">you</span>' : ''}</h1></div>
+      <div><a href="/players" class="back">← Players</a><h1>${h(p0.nickname)} <span class="muted">No. ${p0.number}</span>${mine ? ' <span class="chip win">you</span>' : ''}</h1></div>
     </div>`;
 
   if (!p) { $app.innerHTML = head + `<div class="empty">No finished games yet for ${h(p0.nickname)}.</div>`; return; }
@@ -939,7 +955,7 @@ function viewPlayer(id) {
             ${[...p.history].sort((a, b) => b.date.localeCompare(a.date) || b.number - a.number).map(x => `
               <tr>
                 <td>${fmtDate(x.date)}</td>
-                <td><a href="${Store.game(x.gameId) ? gameHref(Store.game(x.gameId)) : '#/games'}">#${x.number}</a></td>
+                <td><a href="${Store.game(x.gameId) ? gameHref(Store.game(x.gameId)) : '/games'}">#${x.number}</a></td>
                 <td>${x.seat}</td>
                 <td>${roleChip(x.role)}</td>
                 <td>${x.won ? '<span class="chip win">Win</span>' : '<span class="chip loss">Loss</span>'}</td>
@@ -1188,7 +1204,7 @@ async function viewBot() {
           <thead><tr><th>Telegram</th><th>Player</th><th>Since</th><th></th></tr></thead>
           <tbody>${people.map(c => `<tr class="${c.status === 'active' ? '' : 'dead'}">
             <td>${h(c.title || '')} ${c.username ? `<span class="muted">@${h(c.username)}</span>` : ''}</td>
-            <td>${c.nickname ? h(c.nickname) : '<a href="#/players" class="muted small">not linked</a>'}${c.role === 'admin' ? ' <span class="chip admin">admin</span>' : ''}</td>
+            <td>${c.nickname ? h(c.nickname) : '<a href="/players" class="muted small">not linked</a>'}${c.role === 'admin' ? ' <span class="chip admin">admin</span>' : ''}</td>
             <td class="muted small">${h((c.started_at || '').slice(0, 10))}</td>
             <td class="muted small">${c.status === 'active' ? '' : 'stopped'}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Nobody yet.</td></tr>'}</tbody>
         </table></div>
@@ -1304,6 +1320,9 @@ async function viewBot() {
 /* ---------- start ---------- */
 (async () => {
   $app.innerHTML = '<div class="empty">Loading…</div>';
+  // Old links looked like /#/game/…; turn them into plain paths
+  if (location.hash.startsWith('#/')) history.replaceState(null, '', (location.hash.slice(1) || '/') + location.search);
+  currentPath = location.pathname;
   await Store.init();
   route();
 })();

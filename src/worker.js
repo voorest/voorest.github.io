@@ -231,7 +231,7 @@ async function verifyIdToken(idToken, env) {
 
 async function authCallback(request, env) {
   const url = new URL(request.url);
-  const fail = msg => redirect('/#/login-error/' + encodeURIComponent(msg), { 'set-cookie': cookie(OAUTH_COOKIE, '', { maxAge: 0, path: '/api/auth' }) });
+  const fail = msg => redirect('/login-error/' + encodeURIComponent(msg), { 'set-cookie': cookie(OAUTH_COOKIE, '', { maxAge: 0, path: '/api/auth' }) });
   if (url.searchParams.get('error')) return fail(url.searchParams.get('error'));
   const [state, verifier, back] = (getCookie(request, OAUTH_COOKIE) || '').split('|');
   if (!state || state !== url.searchParams.get('state')) return fail('Login expired, please try again');
@@ -282,7 +282,7 @@ async function authCallback(request, env) {
     env.DB.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')"),
     env.DB.prepare(`INSERT INTO sessions (token_hash, account_id, expires_at) VALUES (?, ?, datetime('now', '+${SESSION_DAYS} days'))`).bind(await sha256(token), account.id),
   ]);
-  const target = back && back.startsWith('/') ? back : '/';
+  const target = back && back.startsWith('/') && !back.startsWith('//') ? back : '/';
   const [path, hash] = target.split('#');
   const headers = new Headers({ location: `${path}${path.includes('?') ? '&' : '?'}fresh=1${hash !== undefined ? '#' + hash : ''}` });
   headers.append('set-cookie', cookie(SESSION_COOKIE, token, { maxAge: SESSION_DAYS * 86400 }));
@@ -740,6 +740,9 @@ export default {
         return json({ error: 'Server error' }, 500);
       }
     }
+    // Site pages (/games, /game/17-05-2026/1, /player/27 …) are all the same index.html;
+    // the browser-side router picks the view from the address.
+    if (!/\.[a-z0-9]+$/i.test(url.pathname)) return env.ASSETS.fetch(new Request(new URL('/', url), request));
     return env.ASSETS.fetch(request);
   },
 };

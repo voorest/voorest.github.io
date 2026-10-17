@@ -294,7 +294,7 @@ const Store = (() => {
   function overallNumber(g) {
     return db.games.filter(x => x.id !== String(g.id) && (x.date < g.date || (x.date === g.date && x.number < g.number))).length + 1;
   }
-  /** Games are addressed by date + game number of that day: #/game/17-05-2026/1 */
+  /** Games are addressed by date + game number of that day: /game/17-05-2026/1 */
   const gameByDay = (date, number) => db.games.find(g => g.date === date && g.number === +number);
   const playerByNumber = n => db.players.find(p => p.number === +n);
   const sortedGames = () => [...db.games].sort((a, b) => b.date.localeCompare(a.date) || b.number - a.number);
