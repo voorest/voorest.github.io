@@ -81,8 +81,9 @@ async function ensureAccount(env, from) {
   const uid = String(from.id);
   const username = from.username || null;
   const name = [from.first_name, from.last_name].filter(Boolean).join(' ') || null;
-  let acc = await env.DB.prepare("SELECT id, player_id FROM accounts WHERE provider = 'telegram' AND provider_uid = ?").bind(uid).first();
-  let match = acc ? 'known' : null;
+  let acc = await env.DB.prepare("SELECT id, player_id, last_login_at, EXISTS (SELECT 1 FROM bot_chats WHERE chat_id = ?) AS bot FROM accounts WHERE provider = 'telegram' AND provider_uid = ?").bind(uid, uid).first();
+  // 'firstid' = the admin stored this Telegram ID in advance and the person shows up for the first time
+  let match = acc ? (acc.last_login_at || acc.bot ? 'known' : 'firstid') : null;
   if (!acc && username) {
     acc = await env.DB.prepare("SELECT id, player_id FROM accounts WHERE provider = 'telegram' AND provider_uid IS NULL AND lower(username) = lower(?) ORDER BY id LIMIT 1").bind(username).first();
     if (acc) { match = 'prefill'; await env.DB.prepare('UPDATE accounts SET provider_uid = ?, display_name = ? WHERE id = ?').bind(uid, name, acc.id).run(); }
@@ -94,7 +95,7 @@ async function ensureAccount(env, from) {
   } else {
     await env.DB.prepare('UPDATE accounts SET username = COALESCE(?, username), display_name = COALESCE(?, display_name) WHERE id = ?').bind(username, name, acc.id).run();
   }
-  return { ...acc, match, name, username };
+  return { id: acc.id, player_id: acc.player_id, match, name, username };
 }
 
 async function onMessage(env, msg, deps) {

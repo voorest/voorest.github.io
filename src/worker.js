@@ -267,8 +267,9 @@ async function authCallback(request, env) {
   const name = claims.name || [claims.given_name, claims.family_name].filter(Boolean).join(' ') || null;
 
   // 1) known account → 2) account the admin pre-filled with this @username → 3) new (not linked yet)
-  let account = await env.DB.prepare("SELECT id FROM accounts WHERE provider = 'telegram' AND provider_uid = ?").bind(uid).first();
-  let match = account ? 'known' : null;
+  let account = await env.DB.prepare("SELECT id, last_login_at, EXISTS (SELECT 1 FROM bot_chats WHERE chat_id = ?) AS bot FROM accounts WHERE provider = 'telegram' AND provider_uid = ?").bind(uid, uid).first();
+  // 'firstid' = the admin stored this Telegram ID in advance and the person shows up for the first time
+  let match = account ? (account.last_login_at || account.bot ? 'known' : 'firstid') : null;
   if (!account && username) {
     account = await env.DB.prepare("SELECT id FROM accounts WHERE provider = 'telegram' AND provider_uid IS NULL AND lower(username) = lower(?) ORDER BY id LIMIT 1").bind(username).first();
     if (account) match = 'prefill';
@@ -306,11 +307,14 @@ async function logout(request, env) {
 async function adminPlayers(env) {
   const [players, accounts] = await env.DB.batch([
     env.DB.prepare('SELECT id, COALESCE(number, id) AS number, nickname, first_name, last_name, status, notes, created_at FROM players ORDER BY id'),
-    env.DB.prepare('SELECT id, player_id, provider, provider_uid, username, display_name, role, status, last_login_at FROM accounts ORDER BY id'),
+    env.DB.prepare(`SELECT a.id, a.player_id, a.provider, a.provider_uid, a.username, a.display_name, a.role, a.status, a.last_login_at,
+                           EXISTS (SELECT 1 FROM bot_chats c WHERE c.chat_id = a.provider_uid) AS bot
+                      FROM accounts a ORDER BY a.id`),
   ]);
   return {
     players: players.results.map(p => ({ ...p, id: String(p.id) })),
-    accounts: accounts.results.map(a => ({ ...a, player_id: a.player_id == null ? null : String(a.player_id), linked: a.provider_uid != null })),
+    // linked = Telegram ID known; seen = the person has logged in or pressed Start at least once
+    accounts: accounts.results.map(a => ({ ...a, player_id: a.player_id == null ? null : String(a.player_id), linked: a.provider_uid != null, seen: !!(a.last_login_at || a.bot) })),
   };
 }
 
@@ -595,9 +599,9 @@ async function loginNotice(env, { match, accountId, name, username, via }) {
   const who = `${esc(name || 'Без імені')}${username ? ' (@' + esc(username) + ')' : ''}`;
   const where = via === 'bot' ? 'натиснув(ла) Start у боті' : 'увійшов(ла) на сайт';
   const site = env.SITE_URL || '';
-  if (match === 'prefill') {
+  if (match === 'prefill' || match === 'firstid') {
     const p = await env.DB.prepare('SELECT p.nickname FROM accounts a JOIN players p ON p.id = a.player_id WHERE a.id = ?').bind(accountId).first();
-    return notifyAdmins(env, `✅ ${who} ${where} і автоматично прив'язаний(а) до гравця <b>${esc(p ? p.nickname : '?')}</b> (за @username).`);
+    if (p || match === 'prefill') return notifyAdmins(env, `✅ ${who} ${where} і автоматично прив'язаний(а) до гравця <b>${esc(p ? p.nickname : '?')}</b> (${match === 'prefill' ? 'за @username' : 'за Telegram ID'}).`);
   }
   return notifyAdmins(env, `🆕 ${who} ${where} вперше.\nЩе не прив'язаний(а) до гравця — прив'яжіть на сторінці Players → Telegram logins:\n${site}/players`);
 }

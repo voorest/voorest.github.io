@@ -835,7 +835,13 @@ function viewPlayers() {
       <td class="muted">${p.number}</td>
       <td><a href="${playerHref(p)}">${h(p.nickname)}</a></td>
       ${adminLive ? `<td>${h([pv.first_name, pv.last_name].filter(Boolean).join(' ')) || '<span class="muted">—</span>'}</td>
-        <td>${tg.length ? tg.map(a => `<span class="chip ${a.linked ? 'win' : 'muted'}" title="${a.linked ? 'linked: has logged in' : 'waiting for first login'}">@${h(a.username || a.display_name || '?')}</span>`).join(' ') : '<span class="muted">—</span>'}</td>` : ''}
+        <td>${tg.length ? tg.map(a => {
+          const label = a.username ? '@' + a.username : (a.display_name || 'Telegram');
+          const [cls, tip] = a.seen ? ['win', 'Connected: has logged in or pressed Start']
+            : a.linked ? ['', `Telegram ID known (${a.display_name || ''}): linked automatically on the first login or Start`]
+            : ['muted', 'Waiting for the first login or Start (matched by @username)'];
+          return `<span class="chip ${cls}" title="${h(tip)}">${h(label)}</span>`;
+        }).join(' ') : '<span class="muted">—</span>'}</td>` : ''}
       <td>${s ? s.games : 0}</td>
       <td>${s ? s.wins : 0}</td>
       <td>${s ? pct(s.rating) : '—'}</td>
@@ -844,7 +850,8 @@ function viewPlayers() {
     </tr>`;
   };
 
-  const loggedIn = accounts.filter(a => a.linked);
+  // logins that really happened (pre-filled IDs / @usernames show in the Telegram column until then)
+  const loggedIn = accounts.filter(a => a.seen || (a.linked && !a.player_id));
   $app.innerHTML = `
     <div class="page-head"><h1>Players <span class="muted">· ${list.length}</span></h1></div>
     ${edit ? `<section class="card">

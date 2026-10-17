@@ -43,7 +43,7 @@ Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (do
 - `players`: **nickname is the only public field**. First and last names are private (admin only). Player **No.** = `players.number` (join order): a new player gets max+1, so deleting the newest frees its number; deleting an older one leaves a gap and nobody is renumbered.
 - `accounts`: Telegram logins linked to a player. role `player` (default) or `admin`. Admin is granted only in the DB/admin UI, never by sign-up. On the Players page every link/role change asks for confirmation (Cancel restores the old value); your own role is shown as "admin · you" and can't be changed there (the server refuses it too).
 - Linking: the admin enters a player's Telegram @username, and the player is linked on first login. The admin can also link a login by hand.
-- First login (site or bot Start) sends admins a Telegram notice: "✅ … linked automatically to <player>" (matched the pre-filled @username) or "🆕 … not linked yet" with a link to /players. Matching order: known Telegram id → pre-filled @username → new pending account.
+- First login (site or bot Start) sends admins a Telegram notice: "✅ … linked automatically to <player>" (matched the pre-filled @username) or "🆕 … not linked yet" with a link to /players. Matching order: known Telegram id → pre-filled @username → new pending account. The admin can also store a Telegram ID in advance (accounts row with provider_uid + player_id, done from the group export via scripts/telegram_members.py): the first login/Start then sends "✅ … (за Telegram ID)". Players page chips: green = connected, plain = ID known (waiting), grey = @username waiting.
 - Public pages show only the dashboard, games and player stats, by nickname.
 
 ## Login
