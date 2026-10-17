@@ -108,7 +108,6 @@ Sessions are stored in D1 as SHA-256 hashes; the cookie is HttpOnly.
   - **Personal day summary** to each linked player: "DD/MM/YYYY: 3 games, 2 wins, rating 58% → 63%, +2 places". Uses the game date, not "today".
   - **Title notices**: a player gained or lost a title (King, Best Sheriff…), from comparing titles before and after the day.
   - **Monthly summary** (personal): games, best role, change vs last month.
-  - **Sign-up poll** ("who is in on Sunday?"): attendance list only. Seats and roles are random at the table, so no seating from it.
-- Dropped: pair stats ("with whom you win"). Postponed: Telegram Mini App (the website with its cached data check is enough).
+- Dropped: pair stats ("with whom you win"), sign-up polls (not planned for now). Postponed: Telegram Mini App (the website with its cached data check is enough).
 - Settings that are still open: rating formula details, which titles to keep.
 - Logo images (owner-made) are kept privately in `data/` (tg-logo-full.jpg, tg-logo-bot-full.jpg).
