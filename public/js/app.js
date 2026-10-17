@@ -876,7 +876,9 @@ function viewPlayers() {
           <td>${h(a.display_name || '')} ${a.username ? `<span class="muted">@${h(a.username)}</span>` : ''}</td>
           <td class="muted">${a.last_login_at ? h(a.last_login_at.slice(0, 16)) : '—'}</td>
           <td><select data-acc-player="${a.id}"><option value="">— not linked —</option>${[...db.players].sort((x, y) => x.nickname.localeCompare(y.nickname)).map(p => `<option value="${p.id}" ${a.player_id === p.id ? 'selected' : ''}>${h(p.nickname)}</option>`).join('')}</select></td>
-          <td><select data-acc-role="${a.id}"><option value="player" ${a.role === 'player' ? 'selected' : ''}>player</option><option value="admin" ${a.role === 'admin' ? 'selected' : ''}>admin</option></select></td>
+          <td>${String(a.id) === String((Store.user() || {}).accountId)
+            ? '<span class="chip admin" title="Your own admin role can\'t be removed here (protection against locking yourself out)">admin · you</span>'
+            : `<select data-acc-role="${a.id}"><option value="player" ${a.role === 'player' ? 'selected' : ''}>player</option><option value="admin" ${a.role === 'admin' ? 'selected' : ''}>admin</option></select>`}</td>
         </tr>`).join('') || '<tr><td colspan="4" class="muted">Nobody has logged in yet.</td></tr>'}</tbody>
       </table></div>
     </section>` : ''}
@@ -912,8 +914,20 @@ function viewPlayers() {
     if (Store.playerInUse(p.id)) { toast(`${p.nickname} has played games — edit instead`); return; }
     if (confirm(`Delete ${p.nickname}?`)) attempt(async () => { await Store.deletePlayer(p.id); viewPlayers(); });
   });
-  $$('[data-acc-player]').forEach(s => s.onchange = () => attempt(async () => { await Store.updateAccount(s.dataset.accPlayer, { player_id: s.value || null }); toast('Saved'); viewPlayers(); }));
-  $$('[data-acc-role]').forEach(s => s.onchange = () => attempt(async () => { await Store.updateAccount(s.dataset.accRole, { role: s.value }); toast('Saved'); viewPlayers(); }));
+  // Changes to logins apply at once, so each one asks first; Cancel puts the old value back.
+  const accName = id => { const a = accounts.find(x => String(x.id) === String(id)) || {}; return a.username ? '@' + a.username : (a.display_name || 'this login'); };
+  $$('[data-acc-player]').forEach(s => s.onchange = () => {
+    const to = s.value ? Store.playerName(s.value) : null;
+    if (!confirm(to ? `Link ${accName(s.dataset.accPlayer)} to player ${to}?\n\nThey will see "${to}" as their own stats (/mystats, My stats). You can change it back here.` : `Unlink ${accName(s.dataset.accPlayer)} from its player?`)) { viewPlayers(); return; }
+    attempt(async () => { await Store.updateAccount(s.dataset.accPlayer, { player_id: s.value || null }); toast('Saved'); viewPlayers(); });
+  });
+  $$('[data-acc-role]').forEach(s => s.onchange = () => {
+    const msg = s.value === 'admin'
+      ? `Make ${accName(s.dataset.accRole)} an ADMIN?\n\nAdmins can edit and delete games, players, settings and send bot messages.`
+      : `Remove admin rights from ${accName(s.dataset.accRole)}?`;
+    if (!confirm(msg)) { viewPlayers(); return; }
+    attempt(async () => { await Store.updateAccount(s.dataset.accRole, { role: s.value }); toast('Saved'); viewPlayers(); });
+  });
 }
 
 /* ---------- player profile ("My stats") ---------- */
@@ -1047,7 +1061,7 @@ function viewData() {
           <button class="btn" id="backupNow">Back up now</button>
           <button class="btn ghost" id="notifyTest">Send test message to my Telegram</button>
         </div>
-        <div id="backupList" class="backup-list"><p class="muted small">Loading…</p></div>
+        <div id="backupList" class="backup-list"><div class="row gap wrap"><span class="muted small">The list is not loaded yet.</span><button class="btn small" id="loadBackups">Show backups</button></div></div>
       </section>` : ''}
       ${live ? '' : `<section class="card">
         <h2>Demo & reset</h2>
@@ -1072,18 +1086,20 @@ function viewData() {
       const box = $('#backupList');
       const res = await attempt(() => Store.listBackups());
       if (!res || !box) return;
-      box.innerHTML = res.backups.length ? `<div class="table-wrap"><table><thead><tr><th>When</th><th>Type</th><th>Games</th><th>Players</th><th>Size</th><th></th></tr></thead><tbody>${res.backups.map(b => `
+      box.innerHTML = `<div class="row gap"><span class="spacer"></span><button class="btn small ghost" id="refreshBackups">↻ Refresh</button></div>` + (res.backups.length ? `<div class="table-wrap"><table><thead><tr><th>When</th><th>Type</th><th>Games</th><th>Players</th><th>Size</th><th></th></tr></thead><tbody>${res.backups.map(b => `
         <tr><td>${h(new Date(b.at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }))}</td><td>${h(b.kind)}</td><td>${b.games}</td><td>${b.players}</td><td>${Math.round(b.size / 1024)} KB</td>
         <td class="actions"><button class="btn small" data-dl="${h(b.name)}">⬇ Download</button></td></tr>`).join('')}</tbody></table></div>`
-        : '<p class="muted small">No backups yet — the first weekly one runs on Sunday, or press “Back up now”.</p>';
+        : '<p class="muted small">No backups yet — the first weekly one runs on Sunday, or press “Back up now”.</p>');
+      $('#refreshBackups').onclick = renderBackups;
       $$('[data-dl]').forEach(btn => btn.onclick = () => attempt(async () => {
         const r = await fetch('/api/admin/backups/' + encodeURIComponent(btn.dataset.dl), { credentials: 'same-origin' });
         if (!r.ok) throw new Error('Download failed (' + r.status + ')');
         await saveFile(`mafia-bcn-backup-${btn.dataset.dl}.json`, await r.text());
       }));
     };
-    renderBackups();
-    $('#backupNow').onclick = () => attempt(async () => { const b = await Store.backupNow(); toast(`Backup saved (${b.games} games, ${Math.round(b.size / 1024)} KB)`); renderBackups(); });
+    // The list is loaded only on request (saves a storage read every time the page opens)
+    $('#loadBackups').onclick = renderBackups;
+    $('#backupNow').onclick = () => attempt(async () => { const b = await Store.backupNow(); toast(`Backup saved (${b.games} games, ${Math.round(b.size / 1024)} KB)`); if (!$('#loadBackups')) renderBackups(); });
     $('#notifyTest').onclick = () => attempt(async () => {
       const r = await Store.notifyTest();
       const bad = r.results.filter(x => !x.ok);

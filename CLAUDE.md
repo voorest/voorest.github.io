@@ -41,7 +41,7 @@ Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (do
 
 ## People & privacy
 - `players`: **nickname is the only public field**. First and last names are private (admin only). Player **No.** = `players.number` (join order): a new player gets max+1, so deleting the newest frees its number; deleting an older one leaves a gap and nobody is renumbered.
-- `accounts`: Telegram logins linked to a player. role `player` (default) or `admin`. Admin is granted only in the DB/admin UI, never by sign-up.
+- `accounts`: Telegram logins linked to a player. role `player` (default) or `admin`. Admin is granted only in the DB/admin UI, never by sign-up. On the Players page every link/role change asks for confirmation (Cancel restores the old value); your own role is shown as "admin · you" and can't be changed there (the server refuses it too).
 - Linking: the admin enters a player's Telegram @username, and the player is linked on first login. The admin can also link a login by hand.
 - Public pages show only the dashboard, games and player stats, by nickname.
 
@@ -66,7 +66,7 @@ Sessions are stored in D1 as SHA-256 hashes; the cookie is HttpOnly.
 
 ## Backups & alerts
 - Cron every **Sunday 07:00 UTC** writes a full backup to KV and keeps 12 weekly + 5 manual.
-- Data page (admin): backups list, Download, "Back up now", "Send test message".
+- Data page (admin): backups list (loads on "Show backups", with Refresh), Download, "Back up now", "Send test message".
 - D1 also has 7-day point-in-time restore. The admin downloads a copy into `data/` from time to time.
 - Telegram messages go **only to admin accounts** that pressed Start in @mafia_bcn_bot: backup report, error alerts (max 1/hour). The Bot API is free.
 
