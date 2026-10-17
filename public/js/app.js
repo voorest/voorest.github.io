@@ -268,7 +268,10 @@ function viewDashboard() {
     return b.rating - a.rating;
   });
   const maxGames = Math.max(...st.players.map(p => p.games));
-  const recent = Store.sortedGames().filter(g => g.winner).slice(0, 6);
+  // Recent games = the last game day only (all its finished games, in order)
+  const finishedGames = Store.sortedGames().filter(g => g.winner);
+  const lastDay = finishedGames.length ? finishedGames[0].date : null;
+  const recent = finishedGames.filter(g => g.date === lastDay).sort((a, b) => a.number - b.number);
 
   $app.innerHTML = `
     <div class="page-head"><h1>Dashboard</h1>${Store.canEdit() ? '<a class="btn primary" href="/games">+ Record a game</a>' : ''}</div>
@@ -354,7 +357,7 @@ function viewDashboard() {
       </section>
     </div>
 
-    <h2 class="section-title">Recent games</h2>
+    <h2 class="section-title">Last game day <span class="muted small">· ${fmtDate(lastDay)} · <a href="/games">all games</a></span></h2>
     <section class="card game-list">${recent.map(gameRow).join('')}</section>
   `;
 

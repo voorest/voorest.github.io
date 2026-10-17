@@ -67,7 +67,7 @@ main { max-width: 1180px; margin: 0 auto; padding: 1.25rem 16px 4rem; }
 .gap { gap: .5rem; }
 .wrap { flex-wrap: wrap; }
 .spacer { flex: 1; }
-.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1rem; margin-top: 1rem; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 1rem; margin: 1rem 0; }
 .grid-2 > .card { margin: 0; }
 
 .card {
