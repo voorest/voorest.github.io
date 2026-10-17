@@ -1,7 +1,7 @@
 # Mafia BCN: project memory
 
 Stats website for our weekend Mafia games in Barcelona (Ukrainian-speaking group, Telegram chat).
-Owner and game master: @voorest (the only admin). Live: https://mafia-bcn.voorest.workers.dev
+Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (domain bought in Cloudflare, Oct 2026).
 
 ## Stack & hosting (all Cloudflare free plan)
 - **Worker** `mafia-bcn` (`src/worker.js`) serves `public/` (plain HTML/CSS/JS, no build step) and the API.
@@ -11,6 +11,14 @@ Owner and game master: @voorest (the only admin). Live: https://mafia-bcn.voores
 - Secrets live only in Cloudflare (Worker → Variables and Secrets): `TELEGRAM_CLIENT_ID`, `TELEGRAM_CLIENT_SECRET`, `TELEGRAM_BOT_TOKEN`. Never commit them.
 - The repo is public, so **no real data in git**: `data/` is ignored (xlsx, backups, `import.sql`).
 - I (Claude) change the DB through the Cloudflare connector; schema changes are applied by hand. Also insert the migration name into `d1_migrations`.
+
+## Domain
+- `SITE_URL` (wrangler `vars`) = https://mafiabcn.com. Pages on other hosts (`*.workers.dev`, `www.`) get a 301 to it; `/api/*` works on every host. `run_worker_first` covers only `/` and `/index.html`, so assets stay free.
+- BotFather Login Widget needs the redirect URL and trusted origin for each host people log in on.
+- Bot links use `SITE_URL`.
+
+## Language
+- The site, code and comments are in English. **Telegram bot messages are in Ukrainian.**
 
 ## Local development
 `npm run seed:local` (copies the newest `data/mafia-bcn-backup-*.json` into the local D1), then `npm run dev`. On localhost with `DEV_LOGIN=true` in `.dev.vars` there is a "Dev login (local admin)" button. It is disabled in production (needs both the var and the localhost hostname).
@@ -72,6 +80,18 @@ Sessions are stored in D1 as SHA-256 hashes; the cookie is HttpOnly.
 - Role ratings use each role's own average.
 - "± exp." = wins minus the wins expected from the roles a player received.
 - Titles: King (best rating, min games), Best Role Player (above average in 3+ roles), Best Sheriff/Don/Mafia/Citizen/Doctor/Maniac, Sharp Eye, Survivor, Most Loyal, Night Target.
+
+## Day stats post (agreed, not built yet)
+- A button per game day: "Send day stats to Telegram". It builds a draft for the admin to review, then posts it to a group topic.
+- Format, in Ukrainian:
+  - header `Mafia BCN · DD/MM/YYYY` and a games score;
+  - per game: `Гра #N — перемога мирних 🔴` / `перемога мафії ⚫`. The circle goes only in the header.
+  - role lines in this order: Дон, Мафія, Шериф, Лікар, Маніяк, Мирні;
+  - "Найкращі гравці дня": everyone with 100% wins that day; skip the block if nobody;
+  - rating change: biggest moves, numbers only, no comments; new players on a separate line;
+  - top-5 (min games) with ↑↓;
+  - links hidden behind text (HTML parse mode), link preview off.
+- Topic: the admin types a command in the topic once, and the bot remembers the thread id.
 
 ## Ideas / next
 - Bot: game sign-up polls, weekly/monthly summaries, open the site as a Telegram Mini App.

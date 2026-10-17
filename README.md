@@ -2,12 +2,12 @@
 
 Games, stats and titles for our weekend Mafia games in Barcelona.
 
-**Live site:** https://mafia-bcn.voorest.workers.dev (Cloudflare: website + API + D1 database)
+**Live site:** https://mafiabcn.com (Cloudflare: website + API + D1 database). The old address mafia-bcn.voorest.workers.dev redirects there.
 
 ## How it fits together
 
 ```
-GitHub (this repo)  ──push to master──▶  Cloudflare Workers Builds  ──deploys──▶  mafia-bcn.voorest.workers.dev
+GitHub (this repo)  ──push to master──▶  Cloudflare Workers Builds  ──deploys──▶  mafiabcn.com
                                                                                         │
                                                                      Cloudflare D1 database "mafia-bcn"
 ```

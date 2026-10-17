@@ -610,6 +610,16 @@ async function weeklyBackup(env) {
 }
 
 /* ---------------- router ---------------- */
+// Pages opened on an old address (workers.dev, www) move to SITE_URL. The API is left alone,
+// so the Telegram webhook and logins started on the old address keep working.
+function canonicalRedirect(request, env, url) {
+  if (!env.SITE_URL || url.pathname.startsWith('/api/')) return null;
+  if (!['GET', 'HEAD'].includes(request.method) || ['localhost', '127.0.0.1'].includes(url.hostname)) return null;
+  const site = new URL(env.SITE_URL);
+  if (url.host === site.host) return null;
+  return Response.redirect(site.origin + url.pathname + url.search, 301);
+}
+
 async function readBody(request) {
   if (!(request.headers.get('content-type') || '').includes('application/json')) throw new HttpError(415, 'Expected JSON');
   try { return await request.json(); } catch { throw new HttpError(400, 'Invalid JSON'); }
@@ -704,6 +714,8 @@ export default {
 
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const canonical = canonicalRedirect(request, env, url);
+    if (canonical) return canonical;
     if (url.pathname.startsWith('/api/')) {
       try {
         return await api(request, env, url);

@@ -6,8 +6,12 @@
   "compatibility_date": "2026-06-01",
   "assets": {
     "directory": "./public",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    // The page itself goes through the Worker first, so old addresses can redirect to SITE_URL
+    "run_worker_first": ["/", "/index.html"]
   },
+  // Main public address. Other hosts (workers.dev, www) redirect here; the API keeps working on all of them.
+  "vars": { "SITE_URL": "https://mafiabcn.com" },
   "d1_databases": [
     {
       "binding": "DB",

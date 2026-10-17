@@ -117,7 +117,7 @@ async function onMessage(env, msg, deps) {
 
   const acc = await ensureAccount(env, msg.from);
   if (isPrivate && cmd !== '/stop') await saveChat(env, chat, 'active');
-  const site = deps.origin;
+  const site = env.SITE_URL || deps.origin;
 
   if (cmd === '/start' || cmd === '/help') {
     const linked = acc && acc.player_id ? await env.DB.prepare('SELECT nickname FROM players WHERE id = ?').bind(acc.player_id).first() : null;
