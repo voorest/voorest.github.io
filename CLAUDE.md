@@ -31,6 +31,7 @@ Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (do
 - A round = **Night N first** (mafia shot, don check, sheriff check, maniac shot, doctor heal), **then Day N** (nominations: who → whom + votes received, then voted out / removed for fouls).
 - A doctor heal cancels a shot on the same seat.
 - A night action counts only while its role is alive at the start of that night (mafia shot: any mafia/don alive). The editor hides the action once the role is out; an old value is ignored and flagged.
+- Winner hint (`GameLogic.outcome`): town if no mafia left; mafia if mafia ≥ citizens; also mafia if, **after a day**, mafia ≥ citizens − 1 and no doctor or maniac is alive (the last night is a formality, so no extra round is needed).
 - Day: "Voted out" is a multi-pick (nobody / one / both on a tie). A revote is entered as extra nomination rows with an empty "who"; those rows don't count for nomination stats. Empty votes = not counted (null), not 0.
 - Imported spreadsheet games (`source='xls'`) have no night notes. Their "alive at end" is stored per seat and trusted; for app games it is computed.
 - Games are numbered per day (`number`) and shown with an **overall #** (running order across all games).

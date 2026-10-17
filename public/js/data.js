@@ -408,15 +408,25 @@ const GameLogic = {
     return c;
   },
 
-  suggestWinner(game) {
+  /** Who has won by the rules, with a short reason, or null if the game can still go either way. */
+  outcome(game) {
     if (!game.rounds.length || game.seats.some(s => !s.role)) return null;
     const { alive } = this.timeline(game);
     const mafia = alive.filter(n => this.teamOf(game, n) === 'mafia').length;
     const town = alive.length - mafia;
-    if (mafia === 0) return 'town';
-    if (mafia >= town) return 'mafia';
+    if (mafia === 0) return { winner: 'town', reason: 'no mafia left' };
+    if (mafia >= town) return { winner: 'mafia', reason: `${mafia} mafia vs ${town} citizen${town === 1 ? '' : 's'}` };
+    // After the day only a night is left: the mafia shoots one more citizen. If that makes it even
+    // and nobody can stop it (no doctor to heal, no maniac to shoot back), the game is already decided.
+    const last = game.rounds[game.rounds.length - 1];
+    const dayDone = (last.nominations || []).length || (last.eliminated || []).length || (last.removed || []).length;
+    const aliveRole = r => alive.some(n => (game.seats.find(s => s.seat === n) || {}).role === r);
+    if (dayDone && mafia >= town - 1 && !aliveRole('doctor') && !aliveRole('maniac')) {
+      return { winner: 'mafia', reason: `${mafia} mafia vs ${town} citizens after the day: the night shot makes it ${mafia} vs ${town - 1}, and there is no doctor or maniac to stop it` };
+    }
     return null;
   },
+  suggestWinner(game) { const o = this.outcome(game); return o ? o.winner : null; },
 
   validate(game) {
     const w = [];

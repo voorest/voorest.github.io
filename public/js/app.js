@@ -436,7 +436,8 @@ function viewGame(id) {
   g.seats.forEach(s => { if (s.playerId) used[s.playerId] = (used[s.playerId] || 0) + 1; });
   const counts = GameLogic.roleCounts(g);
   const warnings = ro ? [] : GameLogic.validate(g);
-  const suggested = ro ? null : GameLogic.suggestWinner(g);
+  const outcome = ro ? null : GameLogic.outcome(g);
+  const suggested = outcome && outcome.winner;
   const has = r => GameLogic.hasRole(g, r);
 
   const seatRows = g.seats.map(s => {
@@ -576,7 +577,7 @@ function viewGame(id) {
         ${tl.alive.map(n => { const s = seatBy(n); return `<span class="alive-chip">${h(lbl(n))} ${s && s.role ? roleChip(s.role) : ''}</span>`; }).join('') || '<span class="muted">nobody</span>'}
       </div>
       ${ro ? (g.notes ? `<p class="notes">${h(g.notes)}</p>` : '') : `
-      ${suggested && suggested !== g.winner ? `<p class="hint">By the rules it looks like <b>${TEAM_LABEL[suggested]}</b> won. <button class="btn small" data-act="winner" data-val="${suggested}">Set ${TEAM_LABEL[suggested]} as winner</button></p>` : ''}
+      ${suggested && suggested !== g.winner ? `<p class="hint">By the rules it looks like <b>${TEAM_LABEL[suggested]}</b> won <span class="muted">(${h(outcome.reason)})</span>. <button class="btn small" data-act="winner" data-val="${suggested}">Set ${TEAM_LABEL[suggested]} as winner</button></p>` : ''}
       <div class="seg">
         <button class="seg-town ${g.winner === 'town' ? 'on' : ''}" data-act="winner" data-val="town">Citizens (МИР) won</button>
         <button class="seg-mafia ${g.winner === 'mafia' ? 'on' : ''}" data-act="winner" data-val="mafia">Mafia (МАФ) won</button>
