@@ -13,7 +13,7 @@ Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (do
 - I (Claude) change the DB through the Cloudflare connector; schema changes are applied by hand. Also insert the migration name into `d1_migrations`.
 
 ## Domain
-- `SITE_URL` (wrangler `vars`) = https://mafiabcn.com. Pages on other hosts (`*.workers.dev`, `www.`) get a 301 to it; `/api/*` works on every host. `run_worker_first` covers only `/` and `/index.html`, so assets stay free.
+- `SITE_URL` (wrangler `vars`) = https://mafiabcn.com. The `*.workers.dev` address is off (`workers_dev: false`, `preview_urls: false`). Pages on `www.` get a 301 to it; `/api/*` works on every host. `run_worker_first` covers only `/` and `/index.html`, so assets stay free.
 - BotFather Login Widget needs the redirect URL and trusted origin for each host people log in on.
 - Bot links use `SITE_URL`.
 

@@ -10,8 +10,11 @@
     // The page itself goes through the Worker first, so old addresses can redirect to SITE_URL
     "run_worker_first": ["/", "/index.html"]
   },
-  // Main public address. Other hosts (workers.dev, www) redirect here; the API keeps working on all of them.
+  // Main public address. www redirects here; the API keeps working on every host.
   "vars": { "SITE_URL": "https://mafiabcn.com" },
+  // The old *.workers.dev address is switched off: the site lives only on mafiabcn.com
+  "workers_dev": false,
+  "preview_urls": false,
   "d1_databases": [
     {
       "binding": "DB",
