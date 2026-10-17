@@ -77,7 +77,7 @@ const Stats = {
       const holder = role => g.seats.find(s => s.role === role && s.playerId);
       const sheriff = holder('sheriff'), don = holder('don'), doctor = holder('doctor'), maniac = holder('maniac');
 
-      g.rounds.forEach(r => {
+      g.rounds.forEach((r, ri) => {
         (r.nominations || []).forEach(nm => {
           const by = bySeat[nm.by];
           if (!by || !by.playerId || !teamOf(nm.target)) return;
@@ -85,7 +85,10 @@ const Stats = {
           p.noms++;
           if (teamOf(nm.by) === 'town') { p.nomsAsTown++; if (teamOf(nm.target) === 'mafia') p.nomsOnMafia++; }
         });
-        const n = r.night || {};
+        // night actions of a role that is already out are ignored (same rule as the timeline)
+        const atNight = (tl.phases.find(ph => ph.round === ri + 1 && ph.phase === 'night') || { alive: [] }).alive;
+        const raw = r.night || {};
+        const n = Object.fromEntries(Object.entries(raw).map(([f, v]) => [f, GameLogic.canAct(g, f, atNight) ? v : null]));
         if (sheriff && n.sheriffCheck && teamOf(n.sheriffCheck)) {
           const p = ensure(sheriff.playerId); p.sheriffChecks++; if (teamOf(n.sheriffCheck) === 'mafia') p.sheriffBlack++;
         }

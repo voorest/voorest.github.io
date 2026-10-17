@@ -356,11 +356,25 @@ const GameLogic = {
   hasRole(game, role) { return game.seats.some(s => s.role === role); },
 
   /** Night deaths: mafia shot and maniac shot, unless the doctor healed that seat. */
-  nightDeaths(night) {
+  /** Who dies this night. `canAct(field)` says whether that action counts (its role is still in the game). */
+  nightDeaths(night, canAct = () => true) {
     const out = [];
-    if (night.mafiaKill && night.mafiaKill !== night.doctorHeal) out.push({ seat: night.mafiaKill, type: 'killed' });
-    if (night.maniacKill && night.maniacKill !== night.doctorHeal && night.maniacKill !== night.mafiaKill) out.push({ seat: night.maniacKill, type: 'maniac' });
+    const shot = f => (canAct(f) ? night[f] : null);
+    const heal = shot('doctorHeal');
+    const mafia = shot('mafiaKill'), maniac = shot('maniacKill');
+    if (mafia && mafia !== heal) out.push({ seat: mafia, type: 'killed' });
+    if (maniac && maniac !== heal && maniac !== mafia) out.push({ seat: maniac, type: 'maniac' });
     return out;
+  },
+
+  /** A night action only counts while a player with that role is alive at the start of the night.
+      Games without roles yet (or roles not used in this game) are not limited. */
+  actorFor: { mafiaKill: ['mafia', 'don'], donCheck: ['don'], sheriffCheck: ['sheriff'], maniacKill: ['maniac'], doctorHeal: ['doctor'] },
+  canAct(game, field, aliveSeats) {
+    const roles = this.actorFor[field] || [];
+    const holders = game.seats.filter(s => roles.includes(s.role));
+    if (!holders.length) return true;
+    return holders.some(s => aliveSeats.includes(s.seat));
   },
 
   timeline(game) {
@@ -370,7 +384,8 @@ const GameLogic = {
     game.rounds.forEach((r, i) => {
       const n = i + 1;
       phases.push({ round: n, phase: 'night', alive: [...alive] });
-      this.nightDeaths(r.night || {}).forEach(d => { if (alive.has(d.seat)) { alive.delete(d.seat); fates[d.seat] = { type: d.type, round: n }; } });
+      const atNight = [...alive];
+      this.nightDeaths(r.night || {}, f => this.canAct(game, f, atNight)).forEach(d => { if (alive.has(d.seat)) { alive.delete(d.seat); fates[d.seat] = { type: d.type, round: n }; } });
       phases.push({ round: n, phase: 'day', alive: [...alive] });
       (r.removed || []).forEach(s => { if (alive.has(s)) { alive.delete(s); fates[s] = { type: 'removed', round: n }; } });
       (r.eliminated || []).forEach(s => { if (alive.has(s)) { alive.delete(s); fates[s] = { type: 'voted', round: n }; } });
@@ -420,6 +435,11 @@ const GameLogic = {
       (r.eliminated || []).forEach(s => { if (tl.alive.includes(s)) w.push(`Seat ${s} is voted out on day ${i + 1} but marked alive at the end`); });
       const dayAlive = (tl.phases.find(p => p.round === i + 1 && p.phase === 'day') || { alive: [] }).alive;
       (r.nominations || []).forEach(n => { if (n.by && !dayAlive.includes(n.by)) w.push(`Day ${i + 1}: seat ${n.by} nominates but was already out`); });
+      const nightAlive = (tl.phases.find(p => p.round === i + 1 && p.phase === 'night') || { alive: [] }).alive;
+      const names = { mafiaKill: 'mafia shot', donCheck: 'don check', sheriffCheck: 'sheriff check', maniacKill: 'maniac shot', doctorHeal: 'doctor heal' };
+      Object.keys(names).forEach(f => {
+        if (r.night && r.night[f] && !this.canAct(game, f, nightAlive)) w.push(`Night ${i + 1}: ${names[f]} is recorded, but that role is already out (it is ignored)`);
+      });
     });
     if (game.winner && !noRole) {
       const mafia = tl.alive.filter(n => this.teamOf(game, n) === 'mafia').length;

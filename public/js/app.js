@@ -488,14 +488,17 @@ function viewGame(id) {
         </div>`).join('');
     const nt = r.night || {};
     const nightField = (field, label, show, kind) => {
-      if (!show) return '';
+      // Once the role is out, its night action disappears (an old value stays visible with a note)
+      const canAct = GameLogic.canAct(g, field, nightAlive);
+      if (!show || (!canAct && !nt[field])) return '';
+      const outNote = canAct ? '' : ' <span class="chip warn">role is out: ignored</span>';
       if (ro) {
         if (!nt[field]) return '';
-        return `<div class="night-ro"><span class="lbl">${label}</span> <b>${h(lbl(nt[field]))}</b> ${kind ? checkResult(nt[field], kind) : ''}${field === 'doctorHeal' && (nt.doctorHeal === nt.mafiaKill || nt.doctorHeal === nt.maniacKill) ? ' <span class="chip win">saved!</span>' : ''}</div>`;
+        return `<div class="night-ro"><span class="lbl">${label}</span> <b>${h(lbl(nt[field]))}</b> ${kind ? checkResult(nt[field], kind) : ''}${outNote}${field === 'doctorHeal' && (nt.doctorHeal === nt.mafiaKill || nt.doctorHeal === nt.maniacKill) ? ' <span class="chip win">saved!</span>' : ''}</div>`;
       }
       return `<label class="field"><span>${label}</span>
         <select data-act="night" data-field="${field}" data-round="${i}">${seatOpts(nightAlive, nt[field], field.endsWith('Kill') ? 'miss / none' : '—')}</select>
-        ${kind ? checkResult(nt[field], kind) : ''}
+        ${kind ? checkResult(nt[field], kind) : ''}${outNote}
       </label>`;
     };
     const anyMafia = has('mafia') || has('don') || !g.seats.some(s => s.role);
@@ -649,7 +652,7 @@ function viewGame(id) {
         else toast(`${p.nickname} added`);
         break;
       }
-      case 'winner': g.winner = el.dataset.val || null; if (g.winner) toast('Result saved'); break;
+      case 'winner': g.winner = el.dataset.val || null; break; // stored with Save changes, like everything else
       case 'notes': g.notes = el.value; renderSaveBar(); return;
       case 'date': {
         const iso = dmyToIso(el.value);
