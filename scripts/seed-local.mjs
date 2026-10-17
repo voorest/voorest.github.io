@@ -45,6 +45,8 @@ for (const t of order) {
     lines.push(`INSERT INTO ${t} (${cols.join(', ')}) VALUES (${cols.map(c => q(row[c])).join(', ')});`);
   }
 }
+// Backups made before player numbers were stored: number = id
+lines.push('UPDATE players SET number = id WHERE number IS NULL;');
 const out = path.join(dataDir, 'seed-local.sql');
 fs.writeFileSync(out, lines.join('\n'));
 console.log(`Wrote ${out} from ${path.basename(file)} (${(T.games || []).length} games, ${(T.players || []).length} players)`);

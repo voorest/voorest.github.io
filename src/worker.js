@@ -109,7 +109,7 @@ async function loadSettings(env) {
 
 async function getData(env) {
   const [players, games, seats, noms, events, settings] = await env.DB.batch([
-    env.DB.prepare("SELECT id, nickname, created_at FROM players WHERE status != 'hidden' ORDER BY id"),
+    env.DB.prepare("SELECT id, COALESCE(number, id) AS number, nickname, created_at FROM players WHERE status != 'hidden' ORDER BY id"),
     env.DB.prepare('SELECT id, date, number, winner, notes, source FROM games ORDER BY date, number'),
     env.DB.prepare('SELECT game_id, seat, player_id, role, alive, fouls FROM game_seats ORDER BY game_id, seat'),
     env.DB.prepare('SELECT game_id, round, by_seat, target_seat, votes FROM nominations ORDER BY game_id, round, position'),
@@ -151,7 +151,7 @@ async function getData(env) {
     schema: 2,
     generatedAt: new Date().toISOString(),
     settings: s,
-    players: players.results.map(p => ({ id: String(p.id), number: p.id, nickname: p.nickname, createdAt: p.created_at })),
+    players: players.results.map(p => ({ id: String(p.id), number: p.number, nickname: p.nickname, createdAt: p.created_at })),
     games: [...byGame.values()],
   };
 }
@@ -299,11 +299,11 @@ async function logout(request, env) {
 /* ---------------- admin: players & accounts ---------------- */
 async function adminPlayers(env) {
   const [players, accounts] = await env.DB.batch([
-    env.DB.prepare('SELECT id, nickname, first_name, last_name, status, notes, created_at FROM players ORDER BY id'),
+    env.DB.prepare('SELECT id, COALESCE(number, id) AS number, nickname, first_name, last_name, status, notes, created_at FROM players ORDER BY id'),
     env.DB.prepare('SELECT id, player_id, provider, provider_uid, username, display_name, role, status, last_login_at FROM accounts ORDER BY id'),
   ]);
   return {
-    players: players.results.map(p => ({ ...p, id: String(p.id), number: p.id })),
+    players: players.results.map(p => ({ ...p, id: String(p.id) })),
     accounts: accounts.results.map(a => ({ ...a, player_id: a.player_id == null ? null : String(a.player_id), linked: a.provider_uid != null })),
   };
 }
@@ -313,8 +313,11 @@ async function createPlayer(env, body) {
   if (!nickname) throw new HttpError(400, 'Nickname is required');
   const existing = await env.DB.prepare('SELECT id FROM players WHERE nickname = ? COLLATE NOCASE').bind(nickname).first();
   if (existing) throw new HttpError(409, 'This nickname already exists');
-  const p = await env.DB.prepare('INSERT INTO players (nickname) VALUES (?) RETURNING id, nickname, created_at').bind(nickname).first();
-  return { id: String(p.id), number: p.id, nickname: p.nickname, createdAt: p.created_at };
+  // Next free number after the highest one: deleting the newest player frees its number again
+  const p = await env.DB.prepare(
+    'INSERT INTO players (nickname, number) VALUES (?, (SELECT COALESCE(MAX(COALESCE(number, id)), 0) + 1 FROM players)) RETURNING id, number, nickname, created_at',
+  ).bind(nickname).first();
+  return { id: String(p.id), number: p.number, nickname: p.nickname, createdAt: p.created_at };
 }
 
 async function updatePlayer(env, id, body) {

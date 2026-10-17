@@ -20,6 +20,39 @@ function localToday() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+/* Date fields always show DD/MM/YYYY (the browser's own date input follows the OS locale).
+   A text input holds the value; the 📅 button opens the native picker. */
+const isoToDmy = iso => (/^\d{4}-\d{2}-\d{2}$/.test(iso || '') ? iso.split('-').reverse().join('/') : '');
+function dmyToIso(v) {
+  const m = String(v || '').trim().match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+  if (!m) return null;
+  const iso = `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  const d = new Date(iso + 'T12:00:00');
+  return !isNaN(d) && d.getDate() === +m[1] ? iso : null;
+}
+function dateField(iso, attrs = '') {
+  return `<span class="date-field"><input type="text" inputmode="numeric" placeholder="DD/MM/YYYY" maxlength="10" value="${isoToDmy(iso)}" ${attrs}>` +
+    `<button type="button" class="date-pick" title="Pick a date" tabindex="-1">📅</button><input type="date" class="date-native" tabindex="-1" aria-hidden="true" value="${iso}"></span>`;
+}
+function wireDateFields(root) {
+  root.querySelectorAll('.date-field').forEach(box => {
+    const text = box.querySelector('input[type=text]'), native = box.querySelector('.date-native');
+    text.addEventListener('input', e => {
+      if (e.inputType && e.inputType.startsWith('delete')) return;
+      const digits = text.value.replace(/\D/g, '').slice(0, 8);
+      text.value = [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4)].filter(Boolean).join('/');
+    });
+    text.addEventListener('change', () => { const iso = dmyToIso(text.value); if (iso) native.value = iso; });
+    box.querySelector('.date-pick').addEventListener('click', () => {
+      try { native.showPicker(); } catch { native.focus(); native.click(); }
+    });
+    native.addEventListener('change', () => {
+      if (!native.value) return;
+      text.value = isoToDmy(native.value);
+      text.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  });
+}
 function toast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -324,7 +357,8 @@ function viewGames() {
     <div class="page-head">
       <h1>Games <span class="muted">· ${games.length}</span></h1>
       ${Store.canEdit() ? `<div class="row gap wrap">
-        <input type="date" id="newDate" value="${localToday()}">
+        ${dateField(localToday(), 'id="newDate" aria-label="Game date"')}
+        <label class="field inline"><span>Players</span><select id="newSeats">${Array.from({ length: 11 }, (_, k) => k + 6).map(n => `<option ${n === (+Store.get().settings.defaultSeats || 10) ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
         <button class="btn primary" id="newGame">+ New game</button>
       </div>` : ''}
     </div>
@@ -335,9 +369,12 @@ function viewGames() {
       </section>`).join('')
       : `<div class="empty">No games yet.</div>`}
   `;
+  wireDateFields($app);
   if ($('#newGame')) $('#newGame').onclick = () => attempt(async () => {
+    const date = dmyToIso($('#newDate').value);
+    if (!date) { toast('Enter the date as DD/MM/YYYY'); $('#newDate').focus(); return; }
     $('#newGame').disabled = true;
-    const g = await Store.newGame($('#newDate').value || localToday());
+    const g = await Store.newGame(date, +$('#newSeats').value);
     location.hash = '#/game/' + g.id;
   }).finally(() => { if ($('#newGame')) $('#newGame').disabled = false; });
 }
@@ -463,7 +500,7 @@ function viewGame(id) {
       </div>
       ${ro ? '' : `<div class="row gap wrap">
         ${Store.isAdmin() && orig.winner ? '<button class="btn" id="publishBtn" title="Prepare a summary post for the Telegram group">📣 Publish to Telegram</button>' : ''}
-        <label class="field inline"><span>Date</span><input type="date" data-act="date" value="${g.date}"></label>
+        <label class="field inline"><span>Date</span>${dateField(g.date, 'data-act="date"')}</label>
         <label class="field inline"><span>Game #</span><input type="number" min="1" data-act="number" value="${g.number}" class="num-input"></label>
         <button class="btn danger" data-act="del-game">Delete</button>
       </div>`}
@@ -473,7 +510,7 @@ function viewGame(id) {
       <div class="section-head">
         <h2>Seats & roles</h2>
         ${ro ? '' : `<div class="row gap wrap">
-          <label class="field inline"><span>Seats</span><select data-act="seat-count">${Array.from({ length: 11 }, (_, k) => k + 6).map(n => `<option ${n === g.seats.length ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+          <label class="field inline"><span>Players</span><select data-act="seat-count">${Array.from({ length: 11 }, (_, k) => k + 6).map(n => `<option ${n === g.seats.length ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
           <button class="btn small" data-act="random-roles">🎲 Random roles</button>
           <button class="btn small ghost" data-act="clear-roles">Clear roles</button>
         </div>`}
@@ -581,7 +618,12 @@ function viewGame(id) {
       }
       case 'winner': g.winner = el.dataset.val || null; if (g.winner) toast('Result saved'); break;
       case 'notes': g.notes = el.value; renderSaveBar(); return;
-      case 'date': if (el.value) g.date = el.value; break;
+      case 'date': {
+        const iso = dmyToIso(el.value);
+        if (!iso) { toast('Enter the date as DD/MM/YYYY'); el.value = isoToDmy(g.date); return; }
+        g.date = iso;
+        break;
+      }
       case 'number': g.number = Math.max(1, +el.value || 1); break;
       case 'del-game':
         if (!confirm('Delete this game permanently?')) return;
@@ -591,6 +633,7 @@ function viewGame(id) {
     commit();
   }
 
+  wireDateFields($app);
   $$('[data-act]').forEach(el => {
     const evt = el.tagName === 'BUTTON' ? 'click' : 'change';
     el.addEventListener(evt, () => handle(el.dataset.act, el));

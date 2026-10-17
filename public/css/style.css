@@ -343,3 +343,9 @@ body:has(.savebar) #toast { bottom: 84px; }
 .post .post-head { margin-bottom: .5rem; }
 .post-text { white-space: pre-wrap; background: var(--surface-2); border-radius: 8px; padding: .7rem .9rem; margin-bottom: .6rem; font-size: .95rem; }
 .post.deleted { opacity: .55; }
+
+/* DD/MM/YYYY date field with a native picker behind the 📅 button */
+.date-field { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+.date-field input[type=text] { width: 8.5em; }
+.date-field .date-pick { background: none; border: 0; cursor: pointer; font-size: 1.1em; padding: 4px; line-height: 1; }
+.date-field .date-native { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; border: 0; padding: 0; }

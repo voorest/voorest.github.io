@@ -246,12 +246,12 @@ const Store = (() => {
   const playerName = id => (player(id) || {}).nickname || '(unknown)';
 
   /* ---------- games ---------- */
-  async function newGame(date) {
+  async function newGame(date, seats) {
     let g;
+    const n = seats || +db.settings.defaultSeats || 10;
     if (isLive()) {
-      g = await api('/api/admin/games', { method: 'POST', body: { date, seats: db.settings.defaultSeats } });
+      g = await api('/api/admin/games', { method: 'POST', body: { date, seats: n } });
     } else {
-      const n = db.settings.defaultSeats || 10;
       const sameDay = db.games.filter(x => x.date === date);
       g = {
         id: uid(), date,

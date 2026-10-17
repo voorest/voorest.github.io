@@ -26,7 +26,8 @@ Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (do
 ## Game rules as modelled
 - Roles: citizen (МИР), sheriff (Ш), doctor (ЛІК), **maniac (МАН) = citizens' team**, mafia (М), don (ДМ).
 - Winner is `town` or `mafia`; every seat on the winning team gets a win.
-- 6–16 seats per game, with a variable role pack.
+- 6–16 seats per game, with a variable role pack. The seat count is chosen on New game ("Players") and can be changed in the editor.
+- Date inputs show DD/MM/YYYY (text field + 📅 native picker); the stored format is ISO.
 - A round = **Night N first** (mafia shot, don check, sheriff check, maniac shot, doctor heal), **then Day N** (nominations: who → whom + votes received, then voted out / removed for fouls).
 - A doctor heal cancels a shot on the same seat.
 - Imported spreadsheet games (`source='xls'`) have no night notes. Their "alive at end" is stored per seat and trusted; for app games it is computed.
@@ -34,7 +35,7 @@ Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (do
 - Game days are Sundays; history imported from `Mafia_stats_v2.xlsx` (14 games, 1 Mar to 3 May 2026). The sheet had day/month swaps, which are fixed.
 
 ## People & privacy
-- `players`: **nickname is the only public field**. First and last names are private (admin only). Player **No.** = id = join order.
+- `players`: **nickname is the only public field**. First and last names are private (admin only). Player **No.** = `players.number` (join order): a new player gets max+1, so deleting the newest frees its number; deleting an older one leaves a gap and nobody is renumbered.
 - `accounts`: Telegram logins linked to a player. role `player` (default) or `admin`. Admin is granted only in the DB/admin UI, never by sign-up.
 - Linking: the admin enters a player's Telegram @username, and the player is linked on first login. The admin can also link a login by hand.
 - Public pages show only the dashboard, games and player stats, by nickname.
