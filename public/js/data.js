@@ -246,42 +246,43 @@ const Store = (() => {
   const playerName = id => (player(id) || {}).nickname || '(unknown)';
 
   /* ---------- games ---------- */
-  async function newGame(date, seats) {
-    let g;
+  /** A new game exists only in the browser until its first "Save changes". */
+  function draftGame(date, seats) {
     const n = seats || +db.settings.defaultSeats || 10;
-    if (isLive()) {
-      g = await api('/api/admin/games', { method: 'POST', body: { date, seats: n } });
-    } else {
-      const sameDay = db.games.filter(x => x.date === date);
-      g = {
-        id: uid(), date,
-        number: sameDay.length ? Math.max(...sameDay.map(x => x.number)) + 1 : 1,
-        seats: Array.from({ length: n }, (_, i) => ({ seat: i + 1, playerId: null, role: null, alive: null, fouls: 0 })),
-        rounds: [], winner: null, notes: '', source: 'app', createdAt: new Date().toISOString(),
-      };
-    }
-    db.games.push(normalize({ games: [g] }).games[0]);
-    saveLocal();
-    return game(g.id);
+    const sameDay = db.games.filter(x => x.date === date);
+    return normalize({ games: [{
+      id: 'new', date,
+      number: sameDay.length ? Math.max(...sameDay.map(x => x.number)) + 1 : 1,
+      seats: Array.from({ length: n }, (_, i) => ({ seat: i + 1, playerId: null, role: null, alive: null, fouls: 0 })),
+      rounds: [], winner: null, notes: '', source: 'app',
+    }] }).games[0];
   }
 
-  /** Save a whole game (called by the editor's "Save changes" button). Throws on failure. */
-  async function saveGame(g) {
+  function prepareForSave(g) {
     const tl = GameLogic.timeline(g);
-    const copy = JSON.parse(JSON.stringify({
+    return JSON.parse(JSON.stringify({
       ...g,
       seats: g.seats.map(s => ({ ...s, alive: g.source === 'xls' ? s.alive : (tl.alive.includes(s.seat) ? 1 : 0) })),
     }));
+  }
+
+  /** Save a whole game (called by the editor's "Save changes" button). Creates it on the first save. Throws on failure. */
+  async function saveGame(g) {
+    const copy = prepareForSave(g);
+    const isNew = copy.id === 'new';
     if (isLive()) {
       setSaveState('saving');
-      try { await api('/api/admin/games/' + g.id, { method: 'PUT', body: copy }); }
-      catch (e) { setSaveState('error', e.message); throw e; }
+      try {
+        if (isNew) copy.id = String((await api('/api/admin/games', { method: 'POST', body: copy })).id);
+        else await api('/api/admin/games/' + g.id, { method: 'PUT', body: copy });
+      } catch (e) { setSaveState('error', e.message); throw e; }
       setSaveState('saved');
-    }
-    const i = db.games.findIndex(x => x.id === String(g.id));
-    if (i >= 0) db.games[i] = normalize({ games: [copy] }).games[0];
+    } else if (isNew) copy.id = uid();
+    const saved = normalize({ games: [copy] }).games[0];
+    const i = db.games.findIndex(x => x.id === saved.id);
+    if (i >= 0) db.games[i] = saved; else db.games.push(saved);
     saveLocal();
-    return game(g.id);
+    return game(saved.id);
   }
   const game = id => db.games.find(g => g.id === String(id));
   async function deleteGame(id) {
@@ -289,11 +290,13 @@ const Store = (() => {
     db.games = db.games.filter(g => g.id !== String(id));
     saveLocal();
   }
-  /** Running number across all games (like the Attendance sheet: 1, 2, 3 …). */
+  /** Running number across all games (like the Attendance sheet: 1, 2, 3 …). Works for an unsaved draft too. */
   function overallNumber(g) {
-    const all = [...db.games].sort((a, b) => a.date.localeCompare(b.date) || a.number - b.number);
-    return all.findIndex(x => x.id === String(g.id)) + 1;
+    return db.games.filter(x => x.id !== String(g.id) && (x.date < g.date || (x.date === g.date && x.number < g.number))).length + 1;
   }
+  /** Games are addressed by date + game number of that day: #/game/17-05-2026/1 */
+  const gameByDay = (date, number) => db.games.find(g => g.date === date && g.number === +number);
+  const playerByNumber = n => db.players.find(p => p.number === +n);
   const sortedGames = () => [...db.games].sort((a, b) => b.date.localeCompare(a.date) || b.number - a.number);
 
   async function saveSettings(patch) {
@@ -324,7 +327,7 @@ const Store = (() => {
     uid, init, throttleWait, get, isLive, canEdit, isAdmin, user, loginAvailable, devLogin, adminData, loadAdmin,
     onSaveState, replace, clear, saveLocal, logout,
     addPlayer, updatePlayer, deletePlayer, updateAccount, playerInUse, player, playerName,
-    newGame, saveGame, game, deleteGame, sortedGames, overallNumber, saveSettings,
+    draftGame, saveGame, game, gameByDay, playerByNumber, deleteGame, sortedGames, overallNumber, saveSettings,
     listBackups, backupNow, notifyTest, bot,
   };
 })();

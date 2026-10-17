@@ -381,9 +381,16 @@ async function createGame(env, body) {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(body.date || '') ? body.date : null;
   if (!date) throw new HttpError(400, 'Date is required (YYYY-MM-DD)');
   const settings = await loadSettings(env);
-  const seats = int(body.seats ?? settings.defaultSeats ?? 10, 4, 20);
+  // The editor sends the whole game on its first save; older callers send only a seat count.
+  const full = Array.isArray(body.seats);
+  const seats = int(full ? body.seats.length : body.seats ?? settings.defaultSeats ?? 10, 4, 20);
   const next = await env.DB.prepare('SELECT COALESCE(MAX(number), 0) + 1 AS n FROM games WHERE date = ?').bind(date).first();
   const g = await env.DB.prepare("INSERT INTO games (date, number, source) VALUES (?, ?, 'app') RETURNING id").bind(date, next.n).first();
+  if (full) {
+    try { await saveGame(env, g.id, { ...body, number: body.number ?? next.n }); }
+    catch (e) { await deleteGame(env, g.id); throw e; }
+    return { id: String(g.id) };
+  }
   await env.DB.batch(insertMany(env.DB, 'game_seats', ['game_id', 'seat'], Array.from({ length: seats }, (_, i) => [g.id, i + 1])));
   return {
     id: String(g.id), date, number: next.n, winner: null, notes: '', source: 'app', rounds: [],

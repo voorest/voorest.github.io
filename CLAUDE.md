@@ -32,6 +32,8 @@ Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (do
 - A doctor heal cancels a shot on the same seat.
 - Imported spreadsheet games (`source='xls'`) have no night notes. Their "alive at end" is stored per seat and trusted; for app games it is computed.
 - Games are numbered per day (`number`) and shown with an **overall #** (running order across all games).
+- **No database ids in the UI.** Addresses: games `#/game/DD-MM-YYYY/N` (date + game # of the day), players `#/player/<No.>`. Old `#/game/<id>` links are rewritten.
+- **New game = browser-only draft** (`#/game/new`) until the first "Save changes", which POSTs the whole game (create + save in one request). Leaving or Discard drops it.
 - Game days are Sundays; history imported from `Mafia_stats_v2.xlsx` (14 games, 1 Mar to 3 May 2026). The sheet had day/month swaps, which are fixed.
 
 ## People & privacy
@@ -49,7 +51,7 @@ Telegram OpenID Connect (authorization code + PKCE). BotFather → Login Widget:
 Sessions are stored in D1 as SHA-256 hashes; the cookie is HttpOnly.
 
 ## Saving & editing
-- The admin edits on the live site. **Game edits are a draft**: a "Save changes" bar with a confirm dialog that lists the changes. Leaving the page with unsaved changes asks first.
+- The admin edits on the live site. **Game edits are a draft** (a new game too, see above): a "Save changes" bar with a confirm dialog that lists the changes. Leaving the page with unsaved changes asks first.
 - Writes need JSON plus a same-origin check. Every successful admin write rebuilds the KV public copy.
 
 ## Free-limit protection (decided Oct 2026)

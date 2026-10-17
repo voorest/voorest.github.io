@@ -53,6 +53,13 @@ function wireDateFields(root) {
     });
   });
 }
+/* Addresses use our own numbers, never database ids:
+   games  #/game/17-05-2026/1  (date + game number of that day), players  #/player/27  (player No.) */
+const gameHref = g => (g.id === 'new' ? '#/game/new' : `#/game/${isoToDmy(g.date).replace(/\//g, '-')}/${g.number}`);
+const playerHref = pOrId => {
+  const p = typeof pOrId === 'object' && pOrId ? pOrId : Store.player(pOrId);
+  return `#/player/${p && p.number ? p.number : pOrId}`;
+};
 function toast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -143,7 +150,15 @@ Store.onSaveState((s, msg) => {
 /* ---------- router ---------- */
 function route() {
   const parts = (location.hash || '#/dashboard').replace(/^#\/?/, '').split('/');
-  const view = parts[0] || 'dashboard', id = parts[1];
+  const view = parts[0] || 'dashboard';
+  let id = parts[1];
+  if (view === 'game' && id && id !== 'new') {
+    const iso = /^\d{2}-\d{2}-\d{4}$/.test(id) ? dmyToIso(id.replace(/-/g, '/')) : null;
+    const g = iso ? Store.gameByDay(iso, parts[2]) : Store.game(id); // old links used the database id
+    if (g && !iso) { history.replaceState(null, '', gameHref(g)); currentHash = location.hash; }
+    id = g ? g.id : '-';
+  }
+  if (view === 'player' && id) { const p = Store.playerByNumber(id); id = p ? p.id : '-'; }
   const navKey = { game: 'games', player: 'players' }[view] || view;
   document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('active', a.dataset.route === navKey));
   const db = Store.get();
@@ -175,9 +190,9 @@ function route() {
 let currentHash = location.hash;
 window.addEventListener('hashchange', () => {
   if (UI.skipHash) { UI.skipHash = false; return; }
-  const stillHere = UI.draft && location.hash === '#/game/' + UI.draft.id;
+  const stillHere = UI.draft && location.hash === UI.draft.hash;
   if (!stillHere && gameDirty()) {
-    if (!confirm('You have unsaved changes in this game. Leave without saving?')) {
+    if (!confirm(UI.draft.id === 'new' ? 'This new game is not saved yet. Leave and discard it?' : 'You have unsaved changes in this game. Leave without saving?')) {
       UI.skipHash = true;
       location.hash = currentHash;
       return;
@@ -261,7 +276,7 @@ function viewDashboard() {
           <div class="title-body">
             <div class="title-name">${h(t.title)}</div>
             ${t.player
-              ? `<a class="title-holder" href="#/player/${t.player.id}">${h(t.player.name)}</a><div class="title-detail">${h(t.detail)}</div>`
+              ? `<a class="title-holder" href="${playerHref(t.player)}">${h(t.player.name)}</a><div class="title-detail">${h(t.detail)}</div>`
               : `<div class="title-detail">Nobody yet (${h(t.rule)})</div>`}
             <div class="title-desc">${h(t.desc)}</div>
           </div>
@@ -278,7 +293,7 @@ function viewDashboard() {
               <tr>
                 <td class="muted">${i + 1}</td>
                 <td class="muted">${p.number}</td>
-                <td><a href="#/player/${p.id}">${h(p.name)}</a></td>
+                <td><a href="${playerHref(p)}">${h(p.name)}</a></td>
                 <td>${p.games}</td>
                 <td>${p.wins}</td>
                 <td>${pct(p.winRate)}</td>
@@ -307,7 +322,7 @@ function viewDashboard() {
             return `<div class="role-block">
               <h4>${roleChip(r)} <span class="muted small">avg ${pct(st.baseline[r])} · ${st.roleTotals[r].g} games</span></h4>
               ${list.length ? list.map(p => `
-                <div class="bar-row"><a href="#/player/${p.id}">${h(p.name)}</a>${bar(p.roleRating[r], 1, 'role-' + r)}<span class="num">${pct(p.roleRating[r])} <span class="muted">${p.byRole[r].w}/${p.byRole[r].g}</span></span></div>`).join('')
+                <div class="bar-row"><a href="${playerHref(p)}">${h(p.name)}</a>${bar(p.roleRating[r], 1, 'role-' + r)}<span class="num">${pct(p.roleRating[r])} <span class="muted">${p.byRole[r].w}/${p.byRole[r].g}</span></span></div>`).join('')
                 : '<p class="muted small">No games yet.</p>'}
             </div>`;
           }).join('')}
@@ -318,7 +333,7 @@ function viewDashboard() {
         <h2>Attendance</h2>
         <p class="muted small">Games played (and number of game days).</p>
         ${[...st.players].sort((a, b) => b.games - a.games || b.days - a.days).slice(0, 30).map(p => `
-          <div class="bar-row"><a href="#/player/${p.id}">${h(p.name)}</a>${bar(p.games, maxGames, 'accent')}<span class="num">${p.games} <span class="muted">· ${p.days}d</span></span></div>`).join('')}
+          <div class="bar-row"><a href="${playerHref(p)}">${h(p.name)}</a>${bar(p.games, maxGames, 'accent')}<span class="num">${p.games} <span class="muted">· ${p.days}d</span></span></div>`).join('')}
       </section>
     </div>
 
@@ -335,7 +350,7 @@ function viewDashboard() {
 
 function gameRow(g) {
   const filled = g.seats.filter(s => s.playerId).length;
-  return `<a class="game-row" href="#/game/${g.id}">
+  return `<a class="game-row" href="${gameHref(g)}">
     <span class="gnum">#${g.number}</span>
     <span class="gdate">${fmtDate(g.date)}</span>
     <span class="muted small">overall #${Store.overallNumber(g)}</span>
@@ -373,9 +388,10 @@ function viewGames() {
   if ($('#newGame')) $('#newGame').onclick = () => attempt(async () => {
     const date = dmyToIso($('#newDate').value);
     if (!date) { toast('Enter the date as DD/MM/YYYY'); $('#newDate').focus(); return; }
-    $('#newGame').disabled = true;
-    const g = await Store.newGame(date, +$('#newSeats').value);
-    location.hash = '#/game/' + g.id;
+    // Nothing is stored yet: the game is created on its first "Save changes"
+    const g = Store.draftGame(date, +$('#newSeats').value);
+    UI.draft = { id: 'new', g, base: JSON.stringify(g), hash: '#/game/new' };
+    location.hash = '#/game/new';
   }).finally(() => { if ($('#newGame')) $('#newGame').disabled = false; });
 }
 
@@ -383,11 +399,12 @@ function viewGames() {
    GAME SCREEN — editor for the admin (and in local mode), read-only otherwise
    ============================================================ */
 function viewGame(id) {
-  const orig = Store.game(id);
+  const isNew = id === 'new';
+  const orig = isNew ? (UI.draft && UI.draft.id === 'new' && Store.canEdit() ? UI.draft.g : null) : Store.game(id);
   if (!orig) { $app.innerHTML = `<div class="empty">Game not found. <a href="#/games">Back to games</a></div>`; return; }
   const ro = !Store.canEdit();
   // Editing works on a draft copy; nothing is stored until "Save changes".
-  if (!ro && (!UI.draft || UI.draft.id !== orig.id)) UI.draft = { id: orig.id, g: JSON.parse(JSON.stringify(orig)), base: JSON.stringify(orig) };
+  if (!ro && (!UI.draft || UI.draft.id !== orig.id)) UI.draft = { id: orig.id, g: JSON.parse(JSON.stringify(orig)), base: JSON.stringify(orig), hash: location.hash };
   const g = ro ? orig : UI.draft.g;
   const dis = ro ? 'disabled' : '';
   const db = Store.get();
@@ -411,7 +428,7 @@ function viewGame(id) {
     const f = alive ? null : tl.fates[s.seat];
     return `<tr class="${alive ? '' : 'dead'}">
       <td class="seatno">${s.seat}</td>
-      <td>${ro ? (s.playerId ? `<a href="#/player/${s.playerId}">${h(name(s.seat))}</a>` : '—') : `<select data-act="seat-player" data-seat="${s.seat}" class="${s.playerId && used[s.playerId] > 1 ? 'bad' : ''}">
+      <td>${ro ? (s.playerId ? `<a href="${playerHref(s.playerId)}">${h(name(s.seat))}</a>` : '—') : `<select data-act="seat-player" data-seat="${s.seat}" class="${s.playerId && used[s.playerId] > 1 ? 'bad' : ''}">
         <option value="">— pick player —</option>
         ${players.map(p => `<option value="${p.id}" ${p.id === s.playerId ? 'selected' : ''}>${h(p.nickname)}${used[p.id] && p.id !== s.playerId ? ' (seated)' : ''}</option>`).join('')}
       </select>`}</td>
@@ -495,11 +512,11 @@ function viewGame(id) {
     <div class="page-head">
       <div>
         <a href="#/games" class="back">← Games</a>
-        <h1>Game #${g.number} <span class="muted">· ${fmtDate(g.date)} · overall #${Store.overallNumber(orig)}</span></h1>
-        <div class="row gap wrap">${winnerChip(g.winner)}${imported ? '<span class="chip muted">imported from spreadsheet</span>' : ''}</div>
+        <h1>Game #${g.number} <span class="muted">· ${fmtDate(g.date)} · overall #${Store.overallNumber(g)}</span></h1>
+        <div class="row gap wrap">${isNew ? '<span class="chip warn">New — not saved yet</span>' : winnerChip(g.winner)}${imported ? '<span class="chip muted">imported from spreadsheet</span>' : ''}</div>
       </div>
       ${ro ? '' : `<div class="row gap wrap">
-        ${Store.isAdmin() && orig.winner ? '<button class="btn" id="publishBtn" title="Prepare a summary post for the Telegram group">📣 Publish to Telegram</button>' : ''}
+        ${Store.isAdmin() && orig.winner && !isNew ? '<button class="btn" id="publishBtn" title="Prepare a summary post for the Telegram group">📣 Publish to Telegram</button>' : ''}
         <label class="field inline"><span>Date</span>${dateField(g.date, 'data-act="date"')}</label>
         <label class="field inline"><span>Game #</span><input type="number" min="1" data-act="number" value="${g.number}" class="num-input"></label>
         <button class="btn danger" data-act="del-game">Delete</button>
@@ -626,6 +643,11 @@ function viewGame(id) {
       }
       case 'number': g.number = Math.max(1, +el.value || 1); break;
       case 'del-game':
+        if (isNew) {
+          if (!confirm('Discard this new game? Nothing has been saved yet.')) return;
+          UI.draft = null; renderSaveBar(); location.hash = '#/games';
+          return;
+        }
         if (!confirm('Delete this game permanently?')) return;
         if (await attempt(() => Store.deleteGame(id).then(() => true))) { UI.draft = null; location.hash = '#/games'; }
         return;
@@ -648,12 +670,12 @@ function viewGame(id) {
 }
 
 /* ---------- unsaved changes: bar, summary, save/discard ---------- */
-function gameDirty() { return !!(UI.draft && JSON.stringify(UI.draft.g) !== UI.draft.base); }
+function gameDirty() { return !!(UI.draft && (UI.draft.id === 'new' || JSON.stringify(UI.draft.g) !== UI.draft.base)); }
 
 function changeSummary(base, g) {
   const out = [];
   const label = w => (w ? TEAM_LABEL[w] + ' won' : 'not finished');
-  if (base.date !== g.date) out.push(`Date: ${base.date} → ${g.date}`);
+  if (base.date !== g.date) out.push(`Date: ${isoToDmy(base.date)} → ${isoToDmy(g.date)}`);
   if (base.number !== g.number) out.push(`Game #: ${base.number} → ${g.number}`);
   if (base.winner !== g.winner) out.push(`Result: ${label(base.winner)} → ${label(g.winner)}`);
   if ((base.notes || '') !== (g.notes || '')) out.push('Notes changed');
@@ -685,29 +707,39 @@ function renderSaveBar() {
     bar.className = 'savebar';
     document.body.appendChild(bar);
   }
-  const changes = changeSummary(JSON.parse(UI.draft.base), UI.draft.g);
+  const isNew = UI.draft.id === 'new';
+  const changes = isNew ? ['nothing is stored until you save'] : changeSummary(JSON.parse(UI.draft.base), UI.draft.g);
   bar.innerHTML = `<div class="savebar-inner">
-      <span class="dot"></span><b>Unsaved changes</b><span class="muted small">${changes.length} change${changes.length === 1 ? '' : 's'}: ${h(changes.slice(0, 3).join(' · '))}${changes.length > 3 ? ' …' : ''}</span>
+      <span class="dot"></span><b>${isNew ? 'New game' : 'Unsaved changes'}</b><span class="muted small">${isNew ? '' : `${changes.length} change${changes.length === 1 ? '' : 's'}: `}${h(changes.slice(0, 3).join(' · '))}${changes.length > 3 ? ' …' : ''}</span>
       <span class="spacer"></span>
       <button class="btn ghost small" id="discardBtn">Discard</button>
       <button class="btn primary" id="saveBtn">Save changes</button>
     </div>`;
   document.getElementById('discardBtn').onclick = () => {
-    if (!confirm('Discard all unsaved changes in this game?')) return;
+    if (!confirm(isNew ? 'Discard this new game? Nothing has been saved yet.' : 'Discard all unsaved changes in this game?')) return;
     const id = UI.draft.id;
     UI.draft = null;
     renderSaveBar();
-    viewGame(id);
+    if (id === 'new') location.hash = '#/games'; else viewGame(id);
   };
   document.getElementById('saveBtn').onclick = async () => {
-    const list = changeSummary(JSON.parse(UI.draft.base), UI.draft.g);
-    const text = list.slice(0, 15).map(x => '• ' + x).join('\n') + (list.length > 15 ? `\n… and ${list.length - 15} more` : '');
-    if (!confirm(`Save these changes to Game #${UI.draft.g.number} (${UI.draft.g.date})?\n\n${text}`)) return;
+    const dg = UI.draft.g;
+    if (isNew) {
+      const filled = dg.seats.filter(x => x.playerId).length;
+      if (!confirm(`Save new Game #${dg.number} (${isoToDmy(dg.date)})?\n\n${filled} of ${dg.seats.length} seats filled · ${dg.rounds.length} round(s) · ${dg.winner ? TEAM_LABEL[dg.winner] + ' won' : 'not finished'}`)) return;
+    } else {
+      const list = changeSummary(JSON.parse(UI.draft.base), dg);
+      const text = list.slice(0, 15).map(x => '• ' + x).join('\n') + (list.length > 15 ? `\n… and ${list.length - 15} more` : '');
+      if (!confirm(`Save these changes to Game #${dg.number} (${isoToDmy(dg.date)})?\n\n${text}`)) return;
+    }
     const btn = document.getElementById('saveBtn');
     btn.disabled = true; btn.textContent = 'Saving…';
     const saved = await attempt(() => Store.saveGame(UI.draft.g));
     if (saved) {
-      UI.draft = { id: saved.id, g: JSON.parse(JSON.stringify(saved)), base: JSON.stringify(saved) };
+      // The address follows the date and game number (they may have changed, or the game is new)
+      const href = gameHref(saved);
+      if (location.hash !== href) { history.replaceState(null, '', href); currentHash = href; }
+      UI.draft = { id: saved.id, g: JSON.parse(JSON.stringify(saved)), base: JSON.stringify(saved), hash: href };
       toast('Game saved');
       renderSaveBar();
       viewGame(saved.id);
@@ -758,7 +790,7 @@ function viewPlayers() {
     }
     return `<tr data-name="${h((p.nickname + ' ' + (pv.first_name || '') + ' ' + (pv.last_name || '') + ' ' + tg.map(a => a.username).join(' ')).toLowerCase())}">
       <td class="muted">${p.number}</td>
-      <td><a href="#/player/${p.id}">${h(p.nickname)}</a></td>
+      <td><a href="${playerHref(p)}">${h(p.nickname)}</a></td>
       ${adminLive ? `<td>${h([pv.first_name, pv.last_name].filter(Boolean).join(' ')) || '<span class="muted">—</span>'}</td>
         <td>${tg.length ? tg.map(a => `<span class="chip ${a.linked ? 'win' : 'muted'}" title="${a.linked ? 'linked: has logged in' : 'waiting for first login'}">@${h(a.username || a.display_name || '?')}</span>`).join(' ') : '<span class="muted">—</span>'}</td>` : ''}
       <td>${s ? s.games : 0}</td>
@@ -907,7 +939,7 @@ function viewPlayer(id) {
             ${[...p.history].sort((a, b) => b.date.localeCompare(a.date) || b.number - a.number).map(x => `
               <tr>
                 <td>${fmtDate(x.date)}</td>
-                <td><a href="#/game/${x.gameId}">#${x.number}</a></td>
+                <td><a href="${Store.game(x.gameId) ? gameHref(Store.game(x.gameId)) : '#/games'}">#${x.number}</a></td>
                 <td>${x.seat}</td>
                 <td>${roleChip(x.role)}</td>
                 <td>${x.won ? '<span class="chip win">Win</span>' : '<span class="chip loss">Loss</span>'}</td>
@@ -1108,7 +1140,7 @@ function gameSummaryText(g) {
     'Seats and roles (✅ = alive at the end):',
     ...lines,
     '',
-    `Details and stats: ${location.origin}/#/game/${g.id}`,
+    `Details and stats: ${location.origin}/${gameHref(g)}`,
   ].join('\n');
 }
 

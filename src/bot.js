@@ -170,7 +170,7 @@ export function playerStatsText(data, pid, site) {
   const me = per[pid];
   const player = (data.players || []).find(p => p.id === pid) || {};
   const name = escHtml(player.nickname || 'you');
-  if (!me) return `📊 <b>${name}</b>\nNo finished games yet.\n${site}/#/player/${pid}`;
+  if (!me) return `📊 <b>${name}</b>\nNo finished games yet.\n${site}/#/player/${player.number || pid}`;
   const pct = x => Math.round(x * 100) + '%';
   const roles = Object.entries(me.roles).sort((a, b) => b[1].g - a[1].g).map(([r, v]) => `${ROLE_LABEL[r] || r} ${v.w}/${v.g}`).join(' · ');
   const d = new Date(me.last.date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
@@ -181,7 +181,7 @@ export function playerStatsText(data, pid, site) {
     `🎭 ${roles}`,
     `🕒 Last game: ${d} — ${me.last.won ? 'won' : 'lost'} as ${ROLE_LABEL[me.last.role] || me.last.role}`,
     '',
-    `Full stats: ${site}/#/player/${pid}`,
+    `Full stats: ${site}/#/player/${player.number || pid}`,
   ].join('\n');
 }
 
