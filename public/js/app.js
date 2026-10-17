@@ -406,7 +406,7 @@ function viewGames() {
     ${games.length ? Object.entries(groups).map(([date, list]) => `
       <section class="card">
         <div class="section-head"><h3>${fmtDate(date)} <span class="muted">· ${list.length} game${list.length > 1 ? 's' : ''}</span></h3>
-          ${Store.canEdit() ? `<button class="btn small ghost" data-next-day="${date}" title="New game on this day with the same players as the last one (saved only when you press Save changes)">⧉ Next game, same players</button>` : ''}</div>
+          ${Store.canEdit() ? `<button class="btn small ghost icon-btn" data-next-day="${date}" title="Next game on this day with the same players (saved only when you press Save changes)" aria-label="Next game, same players">⧉</button>` : ''}</div>
         <div class="game-list">${list.sort((a, b) => a.number - b.number).map(gameRow).join('')}</div>
       </section>`).join('')
       : `<div class="empty">No games yet.</div>`}
@@ -551,7 +551,7 @@ function viewGame(id) {
         <div class="row gap wrap">${isNew ? '<span class="chip warn">New — not saved yet</span>' : winnerChip(g.winner)}${imported ? '<span class="chip muted">imported from spreadsheet</span>' : ''}</div>
       </div>
       ${ro ? '' : `<div class="row gap wrap">
-        ${!isNew ? '<button class="btn" id="nextSameBtn" title="New game on this day with the same players (saved only when you press Save changes)">⧉ Next game, same players</button>' : ''}
+        ${!isNew ? '<button class="btn icon-btn" id="nextSameBtn" title="Next game on this day with the same players (saved only when you press Save changes)" aria-label="Next game, same players">⧉</button>' : ''}
         ${Store.isAdmin() && orig.winner && !isNew ? '<button class="btn" id="publishBtn" title="Prepare a summary post for the Telegram group">📣 Publish to Telegram</button>' : ''}
         <label class="field inline"><span>Date</span>${dateField(g.date, 'data-act="date"')}</label>
         <label class="field inline"><span>Game #</span><input type="number" min="1" data-act="number" value="${g.number}" class="num-input"></label>
