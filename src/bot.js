@@ -82,17 +82,19 @@ async function ensureAccount(env, from) {
   const username = from.username || null;
   const name = [from.first_name, from.last_name].filter(Boolean).join(' ') || null;
   let acc = await env.DB.prepare("SELECT id, player_id FROM accounts WHERE provider = 'telegram' AND provider_uid = ?").bind(uid).first();
+  let match = acc ? 'known' : null;
   if (!acc && username) {
     acc = await env.DB.prepare("SELECT id, player_id FROM accounts WHERE provider = 'telegram' AND provider_uid IS NULL AND lower(username) = lower(?) ORDER BY id LIMIT 1").bind(username).first();
-    if (acc) await env.DB.prepare('UPDATE accounts SET provider_uid = ?, display_name = ? WHERE id = ?').bind(uid, name, acc.id).run();
+    if (acc) { match = 'prefill'; await env.DB.prepare('UPDATE accounts SET provider_uid = ?, display_name = ? WHERE id = ?').bind(uid, name, acc.id).run(); }
   }
   if (!acc) {
+    match = 'new';
     acc = await env.DB.prepare("INSERT INTO accounts (provider, provider_uid, username, display_name, status) VALUES ('telegram', ?, ?, ?, 'pending') RETURNING id, player_id")
       .bind(uid, username, name).first();
   } else {
     await env.DB.prepare('UPDATE accounts SET username = COALESCE(?, username), display_name = COALESCE(?, display_name) WHERE id = ?').bind(username, name, acc.id).run();
   }
-  return acc;
+  return { ...acc, match, name, username };
 }
 
 async function onMessage(env, msg, deps) {
@@ -118,6 +120,9 @@ async function onMessage(env, msg, deps) {
   }
 
   const acc = await ensureAccount(env, msg.from);
+  if (acc.match !== 'known' && deps.loginNotice) {
+    await deps.loginNotice({ match: acc.match, accountId: acc.id, name: acc.name, username: acc.username }).catch(() => {});
+  }
   if (isPrivate && cmd !== '/stop') await saveChat(env, chat, 'active');
   if (!['/start', '/help', '/mystats'].includes(cmd)) return;
   const linked = acc && acc.player_id ? await env.DB.prepare('SELECT nickname FROM players WHERE id = ?').bind(acc.player_id).first() : null;

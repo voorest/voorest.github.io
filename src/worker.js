@@ -268,8 +268,10 @@ async function authCallback(request, env) {
 
   // 1) known account → 2) account the admin pre-filled with this @username → 3) new (not linked yet)
   let account = await env.DB.prepare("SELECT id FROM accounts WHERE provider = 'telegram' AND provider_uid = ?").bind(uid).first();
+  let match = account ? 'known' : null;
   if (!account && username) {
     account = await env.DB.prepare("SELECT id FROM accounts WHERE provider = 'telegram' AND provider_uid IS NULL AND lower(username) = lower(?) ORDER BY id LIMIT 1").bind(username).first();
+    if (account) match = 'prefill';
   }
   if (account) {
     await env.DB.prepare("UPDATE accounts SET provider_uid = ?, username = COALESCE(?, username), display_name = ?, last_login_at = datetime('now') WHERE id = ?")
@@ -277,7 +279,9 @@ async function authCallback(request, env) {
   } else {
     account = await env.DB.prepare("INSERT INTO accounts (provider, provider_uid, username, display_name, status, last_login_at) VALUES ('telegram', ?, ?, ?, 'pending', datetime('now')) RETURNING id")
       .bind(uid, username, name).first();
+    match = 'new';
   }
+  if (match !== 'known') await loginNotice(env, { match, accountId: account.id, name, username, via: 'site' }).catch(() => {});
 
   const token = randomToken(32);
   await env.DB.batch([
@@ -586,6 +590,18 @@ async function listBackups(env) {
 /* ---------------- Telegram messages to admins (free Bot API) ---------------- */
 const esc = t => String(t).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
+/** Tell the admins about a first login (website or bot): linked automatically by @username, or waiting to be linked. */
+async function loginNotice(env, { match, accountId, name, username, via }) {
+  const who = `${esc(name || 'Без імені')}${username ? ' (@' + esc(username) + ')' : ''}`;
+  const where = via === 'bot' ? 'натиснув(ла) Start у боті' : 'увійшов(ла) на сайт';
+  const site = env.SITE_URL || '';
+  if (match === 'prefill') {
+    const p = await env.DB.prepare('SELECT p.nickname FROM accounts a JOIN players p ON p.id = a.player_id WHERE a.id = ?').bind(accountId).first();
+    return notifyAdmins(env, `✅ ${who} ${where} і автоматично прив'язаний(а) до гравця <b>${esc(p ? p.nickname : '?')}</b> (за @username).`);
+  }
+  return notifyAdmins(env, `🆕 ${who} ${where} вперше.\nЩе не прив'язаний(а) до гравця — прив'яжіть на сторінці Players → Telegram logins:\n${site}/players`);
+}
+
 async function notifyAdmins(env, html) {
   if (!env.TELEGRAM_BOT_TOKEN) return [{ ok: false, error: 'TELEGRAM_BOT_TOKEN is not set' }];
   const { results } = await env.DB.prepare("SELECT provider_uid, username FROM accounts WHERE role = 'admin' AND provider = 'telegram' AND provider_uid IS NOT NULL AND provider_uid != 'dev-admin'").all();
@@ -652,6 +668,7 @@ async function api(request, env, url) {
   if (path === '/api/telegram/webhook' && method === 'POST') {
     return handleWebhook(request, env, {
       origin: url.origin,
+      loginNotice: info => loginNotice(env, { ...info, via: 'bot' }),
       publicData: async () => JSON.parse((await publicSnapshot(env)).body),
     });
   }
