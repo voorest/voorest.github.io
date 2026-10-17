@@ -1274,10 +1274,16 @@ const BOT_COMMANDS = [
 
 /* Bot page. The top part (status, commands, new post) loads at once; History and
    "Who receives messages" load only when asked and stay in memory until you leave the page. */
-async function viewBot() {
+async function viewBot({ refresh = false } = {}) {
   const T = (UI.botTabs ||= { active: 'history', history: null, chats: null });
-  $app.innerHTML = '<div class="empty">Loading bot…</div>';
-  const st = await attempt(() => Store.bot.status());
+  // Status and command previews are kept for the whole visit to the site (until the page is reloaded);
+  // they are fetched again only with ↻ or when the data changed.
+  const C = (UI.botCache ||= { status: null, preview: {} });
+  if (refresh || !C.status) {
+    $app.innerHTML = '<div class="empty">Loading bot…</div>';
+    C.status = await attempt(() => Store.bot.status());
+  }
+  const st = C.status;
   if (!st) { $app.innerHTML = '<div class="empty">Could not load the bot status.</div>'; return; }
   const connected = st.webhook && st.webhook.url === st.expectedUrl;
   const draft = UI.botDraft || {};
@@ -1297,7 +1303,7 @@ async function viewBot() {
           ? `<p><span class="chip win">Connected</span> The bot receives commands and group invites.</p>`
           : `<p><span class="chip warn">Not connected</span> Press the button once (on the live site) so the bot can receive commands.</p>`}
         ${st.webhook && st.webhook.lastError ? `<p class="muted small">Last Telegram error: ${h(st.webhook.lastError)}</p>` : ''}
-        <div class="row gap wrap"><button class="btn ${connected ? 'ghost' : 'primary'}" id="botSetup">${connected ? 'Reconnect' : 'Connect bot'}</button></div>
+        <div class="row gap wrap"><button class="btn ${connected ? 'ghost' : 'primary'}" id="botSetup">${connected ? 'Reconnect' : 'Connect bot'}</button><button class="btn ghost" id="statusRefresh" title="Check the status again">↻ Refresh</button></div>
         <p class="muted small mt">Receive messages: <b>${st.subscribers}</b> ${st.subscribers === 1 ? 'person' : 'people'} who pressed Start.</p>
         <h3 class="mt">Groups</h3>
         ${st.groups.length ? st.groups.map(c => `<div class="row gap"><span class="chip">${h(c.title || c.chat_id)}</span><span class="muted small">${c.type}</span></div>`).join('')
@@ -1314,7 +1320,7 @@ async function viewBot() {
             ${players.map(p => `<option value="${p.id}" ${p.id === UI.botCmdPlayer ? 'selected' : ''}>${h(p.nickname)} (No. ${p.number})</option>`).join('')}
           </select>
         </label>
-        <div class="tg-preview" id="cmdPreview"><span class="muted small">Pick a command…</span></div>
+        <div class="tg-preview" id="cmdPreview"></div>
       </section>
 
       <section class="card wide">
@@ -1353,17 +1359,23 @@ async function viewBot() {
   `;
 
   /* ---- commands preview ---- */
-  const preview = () => attempt(async () => {
+  // A preview is asked from the server once per command + player; saved games/players change the key, so stats stay right.
+  const dataKey = () => { const d = Store.get(); return `${d.games.length}:${d.players.length}:${JSON.stringify(d.games).length}:${JSON.stringify(d.players).length}`; };
+  const show = html => { if ($('#cmdPreview')) $('#cmdPreview').innerHTML = `<div class="tg-bubble">${html.replace(/\n/g, '<br>')}</div><div class="row"><span class="spacer"></span><button class="btn small ghost" id="cmdReload" title="Ask the server again">↻</button></div>`; if ($('#cmdReload')) $('#cmdReload').onclick = () => preview(true); };
+  const preview = (force = false) => attempt(async () => {
     UI.botCmd = UI.botCmd || '/mystats';
     UI.botCmdPlayer = $('#cmdPlayer').value || null;
+    const key = `${UI.botCmd}|${UI.botCmdPlayer || ''}|${dataKey()}`;
+    if (!force && C.preview[key]) { show(C.preview[key]); return; }
     $('#cmdPreview').innerHTML = '<span class="muted small">Loading…</span>';
     const r = await Store.bot.preview(UI.botCmd, UI.botCmdPlayer);
     // the answer is our own HTML (names are escaped on the server); Telegram shows line breaks as-is
-    if ($('#cmdPreview')) $('#cmdPreview').innerHTML = `<div class="tg-bubble">${r.html.replace(/\n/g, '<br>')}</div>`;
+    C.preview[key] = r.html;
+    show(r.html);
   });
   $$('[data-cmd]').forEach(b => b.onclick = () => { UI.botCmd = b.dataset.cmd; $$('[data-cmd]').forEach(x => x.classList.toggle('on', x === b)); preview(); });
-  $('#cmdPlayer').onchange = preview;
-  preview();
+  $('#cmdPlayer').onchange = () => preview();
+  preview();   // served from memory when this command + player was already previewed
 
   /* ---- compose ---- */
   const text = $('#botText');
@@ -1390,7 +1402,8 @@ async function viewBot() {
     text.value = val; count();
     $('#botKind').value = t.kind;
   });
-  $('#botSetup').onclick = () => attempt(async () => { await Store.bot.setup(); toast('Bot connected'); viewBot(); });
+  $('#botSetup').onclick = () => attempt(async () => { C.status = await Store.bot.setup(); toast('Bot connected'); viewBot(); });
+  $('#statusRefresh').onclick = () => viewBot({ refresh: true });
 
   // sending happens in batches: keep asking the server until nothing is left
   const drain = async (id, label) => {

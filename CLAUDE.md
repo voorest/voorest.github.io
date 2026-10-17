@@ -76,8 +76,8 @@ Sessions are stored in D1 as SHA-256 hashes; the cookie is HttpOnly.
 - Commands (answers in Ukrainian): `/start` (subscribe + auto-link by the @username the admin pre-filled), `/mystats` (only for linked players), `/help`, `/stop`. Admin alerts (backup, errors) are in Ukrainian too.
 - **Only people who pressed Start receive messages.** The bot is added to the group by hand and remembered via `my_chat_member`.
 - Bot page (admin, live only), top part loads at once:
-  - **Status**: connection, groups, number of subscribers (`GET /api/admin/bot`, light).
-  - **Commands**: list + preview of the bot's answer as any player or as "not linked" (`POST /api/admin/bot/preview`, nothing is sent). Replies come from `commandReply()` in bot.js, the same function the webhook uses.
+  - **Status**: connection, groups, number of subscribers (`GET /api/admin/bot`, light). Fetched once per visit to the site (kept in memory across Bot page visits), ↻ Refresh to check again.
+  - **Commands**: list + preview of the bot's answer as any player or as "not linked" (`POST /api/admin/bot/preview`, nothing is sent). Each command + player is asked once and kept in memory; the key includes a fingerprint of the data, so a saved game refreshes it; ↻ asks again. Replies come from `commandReply()` in bot.js, the same function the webhook uses.
   - **New post**: audience Group / Subscribers / One person (loads the list on demand) / Admins.
   - **Templates**: Day stats (picked game day, agreed format, built in `dayStatsText`), Last game, Game night, Reminder, /mystats how-to, Welcome, Site update.
   - Bottom tabs **History** and **Who receives messages** load only on a button press (`/bot/posts`, `/bot/chats`), with Refresh, and stay in memory until you leave the page.
