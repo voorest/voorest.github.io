@@ -135,22 +135,22 @@ const Stats = {
     const T = [];
     const add = (icon, title, desc, p, detail, rule) => T.push({ icon, title, desc, player: p, detail: p ? detail(p) : '', rule });
 
-    add('👑', 'King of the Game', 'Best overall rating (win rate adjusted for number of games)',
+    add('👑', 'King of the Game', 'Highest rating (win rate that stays fair for players with few games)',
       best(P.filter(p => p.games >= minG), p => p.rating, p => p.games),
       p => `rating ${pct(p.rating)} · ${p.wins}/${p.games} wins`, `min ${minG} games`);
 
     // Role player: good in many roles → average of (role rating − role average) over roles played
-    add('🎭', 'Best Role Player', 'Above average in the most roles (3+ different roles)',
+    add('🎭', 'Best Role Player', 'Beats the usual win rate across different roles, on average (3+ roles played)',
       best(P.filter(p => ROLE_ORDER.filter(r => p.byRole[r].g).length >= 3),
         p => { const rs = ROLE_ORDER.filter(r => p.byRole[r].g); return rs.reduce((a, r) => a + p.roleRating[r] - st.baseline[r], 0) / rs.length; },
         p => p.games),
-      p => { const rs = ROLE_ORDER.filter(r => p.byRole[r].g); const v = rs.reduce((a, r) => a + p.roleRating[r] - st.baseline[r], 0) / rs.length; return `${v >= 0 ? '+' : ''}${Math.round(v * 100)} pts across ${rs.length} roles`; },
+      p => { const rs = ROLE_ORDER.filter(r => p.byRole[r].g); const v = rs.reduce((a, r) => a + p.roleRating[r] - st.baseline[r], 0) / rs.length; return `${Math.abs(Math.round(v * 100))}% ${v >= 0 ? 'above' : 'below'} usual · ${rs.length} roles`; },
       'played 3+ roles');
 
     const icons = { sheriff: '⭐', don: '🎩', mafia: '🕶️', citizen: '🏠', doctor: '💊', maniac: '🔪' };
     ['sheriff', 'don', 'mafia', 'citizen', 'doctor', 'maniac'].forEach(r => {
       const label = ROLES[r].label;
-      add(icons[r], `Best ${label}`, `Highest ${label} rating (role average ${pct(st.baseline[r])})`,
+      add(icons[r], `Best ${label}`, `Best rating as ${label} (usual win rate ${pct(st.baseline[r])})`,
         best(P.filter(p => p.byRole[r].g > 0 && p.byRole[r].w > 0), p => p.roleRating[r], p => p.byRole[r].g),
         p => `rating ${pct(p.roleRating[r])} · ${p.byRole[r].w}/${p.byRole[r].g} wins`, `a win as ${label}`);
     });

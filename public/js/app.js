@@ -232,7 +232,7 @@ const LB_COLS = [
   { key: 'wins', label: 'Wins', get: p => p.wins },
   { key: 'winRate', label: 'Win %', get: p => p.winRate },
   { key: 'rating', label: 'Rating', get: p => p.rating, title: 'Win rate adjusted for number of games (see the note below the table)' },
-  { key: 'aboveExpected', label: '± exp.', get: p => p.aboveExpected, title: 'Wins above/below what is expected for the roles this player got' },
+  { key: 'aboveExpected', label: '± exp.', get: p => p.aboveExpected, title: 'Wins compared with an average player who got the same roles. +2 = two wins more than usual for those roles, −1 = one fewer.' },
   { key: 'days', label: 'Days', get: p => p.days },
   ...ROLE_ORDER.map(r => ({ key: r, label: ROLES[r].label, get: p => p.roleRating[r] + p.byRole[r].g / 1e4 })),
   { key: 'survived', label: 'Alive', get: p => p.survived, title: 'Games alive at the end' },
@@ -328,7 +328,7 @@ function viewDashboard() {
         </table>
       </div>
       <p class="muted small"><b>No.</b> = player number in order of joining (new players get the next number). <b>Rating</b> = win rate adjusted for number of games: (wins + ${st.K} × ${pct(st.overallRate)}) ÷ (games + ${st.K}), so few games stay close to the average.
-      <b>± exp.</b> = wins above what the roles a player got would normally give. Role columns: wins/games. Click a header to sort.</p>
+      <b>± exp.</b> = wins compared with an average player who got the same roles. Some roles win more often than others (${ROLE_ORDER.map(r => `${ROLES[r].label} ${pct(st.baseline[r])}`).join(', ')}), so we add up the usual chance for every game a player played: <span class="pos">+2</span> means two wins more than usual, <span class="neg">−1</span> one fewer. Role columns: wins/games. Click a header to sort.</p>
     </section>
 
     <div class="grid-2">
@@ -970,7 +970,7 @@ function viewPlayer(id) {
       <div class="kpi"><span class="kpi-val">#${rank}</span><span class="kpi-lbl">Rank of ${ranked.length}</span></div>
       <div class="kpi"><span class="kpi-val">${pct(p.rating)}</span><span class="kpi-lbl">Rating</span></div>
       <div class="kpi"><span class="kpi-val">${p.wins}/${p.games}</span><span class="kpi-lbl">Wins / games (${pct(p.winRate)})</span></div>
-      <div class="kpi"><span class="kpi-val ${p.aboveExpected >= 0 ? 'pos' : 'neg'}">${signed(p.aboveExpected)}</span><span class="kpi-lbl">Wins vs expected</span></div>
+      <div class="kpi"><span class="kpi-val ${p.aboveExpected >= 0 ? 'pos' : 'neg'}">${signed(p.aboveExpected)}</span><span class="kpi-lbl" title="Compared with an average player who got the same roles">Wins vs usual for these roles</span></div>
       <div class="kpi"><span class="kpi-val">${p.days}</span><span class="kpi-lbl">Game days</span></div>
     </section>
 
@@ -1157,7 +1157,7 @@ function viewSettings() {
         <p class="muted">Now: K = ${st.K}, average win rate per seat = ${pct(st.overallRate)}. A new player starts at the average; every game moves the rating towards their real win rate. So 8 wins of 10 games ranks higher than 2 of 2.</p>
         <p><b>Role rating</b> — same formula, but with that role's own average:</p>
         <p class="muted">${ROLE_ORDER.map(r => `${ROLES[r].label} ${pct(st.baseline[r])}`).join(' · ')}</p>
-        <p><b>± exp.</b> — wins minus the wins expected from the roles a player received (mafia wins less often, so a mafia win counts for more).</p>
+        <p><b>± exp.</b> — wins compared with an average player who got the same roles. For every game we take the usual win rate of that role (above) and add them up: that is how many wins an average player would have. +2 = two wins more, −1 = one fewer. A mafia win counts for more, because mafia wins less often.</p>
       </section>
     </div>
   `;

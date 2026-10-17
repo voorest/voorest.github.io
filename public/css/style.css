@@ -288,8 +288,8 @@ details summary { cursor: pointer; color: var(--muted); font-size: .85rem; margi
 .night-ro { font-size: .92rem; }
 .night-ro .lbl { color: var(--muted); }
 .hide-ro { display: none; }
-td.pos, .kpi-val.pos { color: var(--ok); }
-td.neg, .kpi-val.neg { color: var(--danger); }
+td.pos, .kpi-val.pos, span.pos { color: var(--ok); }
+td.neg, .kpi-val.neg, span.neg { color: var(--danger); }
 .notes { white-space: pre-wrap; color: var(--muted); }
 @media (max-width: 640px) {
   .nom-row { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
