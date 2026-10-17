@@ -180,6 +180,7 @@ function route() {
   document.querySelectorAll('#nav [data-admin]').forEach(a => { a.hidden = !adminPages; });
   document.querySelectorAll('#nav [data-admin-live]').forEach(a => { a.hidden = !Store.isAdmin(); });
   if ((!adminPages && (view === 'data' || view === 'settings')) || (view === 'bot' && !Store.isAdmin())) { go('/dashboard', { replace: true }); return; }
+  if (view !== 'bot') UI.botTabs = null; // loaded bot lists live only while you stay on the Bot page
   const views = {
     dashboard: viewDashboard, games: viewGames, game: () => viewGame(id),
     players: viewPlayers, player: () => viewPlayer(id), data: viewData, settings: viewSettings, bot: viewBot,
@@ -379,6 +380,15 @@ function gameRow(g) {
 /* ============================================================
    GAMES LIST
    ============================================================ */
+/** Start the next game of the same day with the same players in the same seats (roles empty). Draft only. */
+function draftNextGame(src) {
+  const g = Store.draftGame(src.date, src.seats.length);
+  g.seats.forEach((s, i) => { s.playerId = src.seats[i] ? src.seats[i].playerId : null; });
+  UI.draft = { id: 'new', g, base: JSON.stringify(g), path: '/game/new' };
+  go('/game/new');
+  toast(`Game #${g.number}: same players, now set the roles`);
+}
+
 function viewGames() {
   const games = Store.sortedGames();
   const groups = {};
@@ -395,12 +405,17 @@ function viewGames() {
     </div>
     ${games.length ? Object.entries(groups).map(([date, list]) => `
       <section class="card">
-        <h3>${fmtDate(date)} <span class="muted">· ${list.length} game${list.length > 1 ? 's' : ''}</span></h3>
+        <div class="section-head"><h3>${fmtDate(date)} <span class="muted">· ${list.length} game${list.length > 1 ? 's' : ''}</span></h3>
+          ${Store.canEdit() ? `<button class="btn small ghost" data-next-day="${date}" title="New game on this day with the same players as the last one (saved only when you press Save changes)">⧉ Next game, same players</button>` : ''}</div>
         <div class="game-list">${list.sort((a, b) => a.number - b.number).map(gameRow).join('')}</div>
       </section>`).join('')
       : `<div class="empty">No games yet.</div>`}
   `;
   wireDateFields($app);
+  $$('[data-next-day]').forEach(b => b.onclick = () => {
+    const last = games.filter(g => g.date === b.dataset.nextDay).sort((a, b2) => b2.number - a.number)[0];
+    if (last) draftNextGame(last);
+  });
   if ($('#newGame')) $('#newGame').onclick = () => attempt(async () => {
     const date = dmyToIso($('#newDate').value);
     if (!date) { toast('Enter the date as DD/MM/YYYY'); $('#newDate').focus(); return; }
@@ -536,6 +551,7 @@ function viewGame(id) {
         <div class="row gap wrap">${isNew ? '<span class="chip warn">New — not saved yet</span>' : winnerChip(g.winner)}${imported ? '<span class="chip muted">imported from spreadsheet</span>' : ''}</div>
       </div>
       ${ro ? '' : `<div class="row gap wrap">
+        ${!isNew ? '<button class="btn" id="nextSameBtn" title="New game on this day with the same players (saved only when you press Save changes)">⧉ Next game, same players</button>' : ''}
         ${Store.isAdmin() && orig.winner && !isNew ? '<button class="btn" id="publishBtn" title="Prepare a summary post for the Telegram group">📣 Publish to Telegram</button>' : ''}
         <label class="field inline"><span>Date</span>${dateField(g.date, 'data-act="date"')}</label>
         <label class="field inline"><span>Game #</span><input type="number" min="1" data-act="number" value="${g.number}" class="num-input"></label>
@@ -681,6 +697,10 @@ function viewGame(id) {
     el.addEventListener(evt, () => handle(el.dataset.act, el));
   });
   $('#qaName').addEventListener('keydown', e => { if (e.key === 'Enter') handle('quick-add', e.target); });
+  if ($('#nextSameBtn')) $('#nextSameBtn').onclick = () => {
+    if (gameDirty()) { toast('Save your changes first'); return; }
+    draftNextGame(orig);
+  };
   if ($('#publishBtn')) $('#publishBtn').onclick = () => {
     if (gameDirty()) { toast('Save your changes first'); return; }
     UI.botDraft = { text: gameSummaryText(orig), kind: 'game', gameId: orig.id, audience: 'group' };
@@ -1169,24 +1189,90 @@ function gameSummaryText(g) {
   ].join('\n');
 }
 
-const BOT_TEMPLATES = {
-  mystats: () => `📊 New: your personal stats in our bot!\n\n1. Open @mafia_bcn_bot and press Start\n2. Send /mystats — you get your games, wins, rating and rank\n\nIf the bot says you are not linked yet, write to me (@voorest) and I will connect your Telegram to your player.\n\n🌐 ${location.origin}`,
-  game: () => `🎭 Mafia BCN — this Sunday at 19:00\n📍 Place: …\n\nWho is in? Reply here 👇`,
-  update: () => `🆕 Site update\n\n• …\n\n🌐 ${location.origin}`,
-};
+/** All finished games of one day as a Telegram post (the agreed "day stats" format). */
+function dayStatsText(date) {
+  const db = Store.get();
+  const games = db.games.filter(g => g.date === date && g.winner).sort((a, b) => a.number - b.number);
+  if (!games.length) return '';
+  const town = games.filter(g => g.winner === 'town').length;
+  const out = [`Mafia BCN · ${isoToDmy(date)}`, `Ігор: ${games.length} · Мирні ${town} : ${games.length - town} Мафія`, ''];
+  games.forEach(g => out.push(...gameBlockUk(g), ''));
 
+  // Best players of the day: everyone who won all their games that day
+  const day = {};
+  games.forEach(g => g.seats.forEach(s => {
+    if (!s.playerId || !s.role) return;
+    const d = (day[s.playerId] ||= { g: 0, w: 0 });
+    d.g++; if (ROLES[s.role].team === g.winner) d.w++;
+  }));
+  const best = Object.entries(day).filter(([, d]) => d.w === d.g).sort((a, b) => b[1].g - a[1].g);
+  if (best.length) out.push('Найкращі гравці дня (100% перемог)', best.map(([id, d]) => `${Store.playerName(id)} ${d.w}/${d.g}`).join(' · '), '');
+
+  // Rating before this day vs after it (later games are left out, so an old day reads the same later)
+  const before = Stats.compute({ ...db, games: db.games.filter(g => g.date < date) });
+  const after = Stats.compute({ ...db, games: db.games.filter(g => g.date <= date) });
+  const was = Object.fromEntries(before.players.map(p => [p.id, p]));
+  const pts = x => Math.round(x * 100);
+  const moves = after.players.filter(p => day[p.id] && was[p.id]).map(p => ({ p, from: pts(was[p.id].rating), to: pts(p.rating) }))
+    .map(m => ({ ...m, d: m.to - m.from })).filter(m => m.d !== 0);
+  const ups = moves.filter(m => m.d > 0).sort((a, b) => b.d - a.d).slice(0, 3);
+  const downs = moves.filter(m => m.d < 0).sort((a, b) => a.d - b.d).slice(0, 3);
+  const newbies = after.players.filter(p => day[p.id] && !was[p.id]);
+  if (ups.length || downs.length || newbies.length) {
+    out.push('Зміна рейтингу');
+    [...ups, ...downs].forEach(m => out.push(`${m.p.name}: ${m.from}% → ${m.to}% (${m.d > 0 ? '+' : '−'}${Math.abs(m.d)})`));
+    if (newbies.length) out.push(`Нові гравці: ${newbies.map(p => `${p.name} ${pts(p.rating)}%`).join(', ')}`);
+    out.push('');
+  }
+
+  // Top 5 among players with enough games, with places gained/lost since before the day
+  const minG = +db.settings.minGames || 3;
+  const rank = st => st.players.filter(p => p.games >= minG).sort((a, b) => b.rating - a.rating);
+  const oldPlace = Object.fromEntries(rank(before).map((p, i) => [p.id, i + 1]));
+  const top = rank(after).slice(0, 5);
+  if (top.length) {
+    out.push(`Топ-5 (від ${minG} ігор)`);
+    top.forEach((p, i) => {
+      const o = oldPlace[p.id];
+      const mark = !o ? ' нов.' : o > i + 1 ? ` ↑${o - i - 1}` : o < i + 1 ? ` ↓${i + 1 - o}` : '';
+      out.push(`${i + 1}. ${p.name} — ${pts(p.rating)}%${mark}`);
+    });
+    out.push('');
+  }
+  out.push(`Уся статистика: ${location.origin}`, 'Твоя статистика: /mystats у @mafia_bcn_bot');
+  return out.join('\n');
+}
+
+/* Post templates (Ukrainian). `day` is the game day picked next to the templates. */
+const BOT_TEMPLATES = [
+  { key: 'day', label: 'Day stats', kind: 'day', make: day => dayStatsText(day) || null },
+  { key: 'last', label: 'Last game', kind: 'game', make: () => { const g = Store.sortedGames().find(x => x.winner); return g ? gameSummaryText(g) : null; } },
+  { key: 'announce', label: 'Game night', kind: 'announcement', make: () => `🎭 Mafia BCN — у неділю о 19:00\n📍 Місце: …\n\nХто з нами? Відповідайте тут 👇` },
+  { key: 'reminder', label: 'Reminder', kind: 'announcement', make: () => `⏰ Нагадування: сьогодні граємо в Мафію!\n🕖 Початок о 19:00\n📍 Місце: …\n\nЯкщо не зможете прийти, напишіть, будь ласка 🙏` },
+  { key: 'mystats', label: '/mystats how-to', kind: 'update', make: () => `📊 Новинка: ваша особиста статистика в нашому боті!\n\n1. Відкрийте @mafia_bcn_bot і натисніть Start\n2. Надішліть /mystats — бот покаже ваші ігри, перемоги, рейтинг і місце\n\nЯкщо бот пише, що ви ще не прив'язані, напишіть мені (@voorest), і я прив'яжу ваш Telegram до вашого гравця.\n\n🌐 ${location.origin}` },
+  { key: 'welcome', label: 'Welcome', kind: 'personal', make: () => `👋 Вітаємо в Mafia BCN!\n\nУся статистика наших ігор: ${location.origin}\nВаша особиста статистика: /mystats у @mafia_bcn_bot (натисніть Start)\n\nДо зустрічі за столом! 🎭` },
+  { key: 'update', label: 'Site update', kind: 'update', make: () => `🆕 Оновлення сайту\n\n• …\n\n🌐 ${location.origin}` },
+];
+const BOT_KINDS = { announcement: 'Announcement', game: 'Game summary', day: 'Day stats', update: 'Update', personal: 'Personal' };
+const BOT_COMMANDS = [
+  { cmd: '/start', desc: 'Subscribe to announcements; links the player by @username' },
+  { cmd: '/mystats', desc: 'Personal stats (linked players only)' },
+  { cmd: '/help', desc: 'What the bot can do' },
+  { cmd: '/stop', desc: 'Stop announcements' },
+];
+
+/* Bot page. The top part (status, commands, new post) loads at once; History and
+   "Who receives messages" load only when asked and stay in memory until you leave the page. */
 async function viewBot() {
+  const T = (UI.botTabs ||= { active: 'history', history: null, chats: null });
   $app.innerHTML = '<div class="empty">Loading bot…</div>';
-  const st = await attempt(() => Store.bot.state());
+  const st = await attempt(() => Store.bot.status());
   if (!st) { $app.innerHTML = '<div class="empty">Could not load the bot status.</div>'; return; }
   const connected = st.webhook && st.webhook.url === st.expectedUrl;
-  const groups = st.chats.filter(c => c.type !== 'private' && c.status === 'active');
-  const people = st.chats.filter(c => c.type === 'private');
-  const activePeople = people.filter(c => c.status === 'active');
   const draft = UI.botDraft || {};
-  const fmtWhen = t => t ? new Date(t.replace(' ', 'T') + 'Z').toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '';
-  const age = t => (Date.now() - new Date(t.replace(' ', 'T') + 'Z').getTime()) / 3600e3;
-  const audienceLabel = p => ({ group: 'Group', subscribers: 'Subscribers', admins: 'Admins' }[p.audience] || p.audience);
+  const db = Store.get();
+  const players = [...db.players].sort((a, b) => a.nickname.localeCompare(b.nickname));
+  const days = [...new Set(db.games.filter(g => g.winner).map(g => g.date))].sort().reverse();
 
   $app.innerHTML = `
     <div class="page-head"><h1>Bot <span class="muted">@mafia_bcn_bot</span></h1></div>
@@ -1197,26 +1283,27 @@ async function viewBot() {
         ${!st.tokenSet ? (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)
             ? '<p class="muted">Local copy: the bot token lives only in Cloudflare, so the bot works only on the live site. This is expected.</p>'
             : '<p class="warn-text">TELEGRAM_BOT_TOKEN is not set in Cloudflare.</p>') : connected
-          ? `<p><span class="chip win">Connected</span> The bot receives /start, /mystats and group invites.</p>`
+          ? `<p><span class="chip win">Connected</span> The bot receives commands and group invites.</p>`
           : `<p><span class="chip warn">Not connected</span> Press the button once (on the live site) so the bot can receive commands.</p>`}
         ${st.webhook && st.webhook.lastError ? `<p class="muted small">Last Telegram error: ${h(st.webhook.lastError)}</p>` : ''}
         <div class="row gap wrap"><button class="btn ${connected ? 'ghost' : 'primary'}" id="botSetup">${connected ? 'Reconnect' : 'Connect bot'}</button></div>
+        <p class="muted small mt">Receive messages: <b>${st.subscribers}</b> ${st.subscribers === 1 ? 'person' : 'people'} who pressed Start.</p>
         <h3 class="mt">Groups</h3>
-        ${groups.length ? groups.map(c => `<div class="row gap"><span class="chip">${h(c.title || c.chat_id)}</span><span class="muted small">${c.type}</span></div>`).join('')
+        ${st.groups.length ? st.groups.map(c => `<div class="row gap"><span class="chip">${h(c.title || c.chat_id)}</span><span class="muted small">${c.type}</span></div>`).join('')
           : '<p class="muted small">Not in any group yet. In Telegram open your group → Add members → search <b>@mafia_bcn_bot</b> → add. It then appears here (the bot must be connected first).</p>'}
       </section>
 
       <section class="card">
-        <h2>Who receives messages <span class="muted">· ${activePeople.length}</span></h2>
-        <p class="muted small">Only people who pressed <b>Start</b> in the bot. Linked players can use /mystats.</p>
-        <div class="table-wrap"><table>
-          <thead><tr><th>Telegram</th><th>Player</th><th>Since</th><th></th></tr></thead>
-          <tbody>${people.map(c => `<tr class="${c.status === 'active' ? '' : 'dead'}">
-            <td>${h(c.title || '')} ${c.username ? `<span class="muted">@${h(c.username)}</span>` : ''}</td>
-            <td>${c.nickname ? h(c.nickname) : '<a href="/players" class="muted small">not linked</a>'}${c.role === 'admin' ? ' <span class="chip admin">admin</span>' : ''}</td>
-            <td class="muted small">${h((c.started_at || '').slice(0, 10))}</td>
-            <td class="muted small">${c.status === 'active' ? '' : 'stopped'}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Nobody yet.</td></tr>'}</tbody>
-        </table></div>
+        <h2>Commands</h2>
+        <p class="muted small">What players can send to the bot. Preview the answer as any player; nothing is sent.</p>
+        <div class="cmd-list">${BOT_COMMANDS.map(c => `<button class="cmd ${c.cmd === (UI.botCmd || '/mystats') ? 'on' : ''}" data-cmd="${c.cmd}"><code>${c.cmd}</code><span class="muted small">${h(c.desc)}</span></button>`).join('')}</div>
+        <label class="field"><span>As player</span>
+          <select id="cmdPlayer">
+            <option value="">Someone not linked yet</option>
+            ${players.map(p => `<option value="${p.id}" ${p.id === UI.botCmdPlayer ? 'selected' : ''}>${h(p.nickname)} (No. ${p.number})</option>`).join('')}
+          </select>
+        </label>
+        <div class="tg-preview" id="cmdPreview"><span class="muted small">Pick a command…</span></div>
       </section>
 
       <section class="card wide">
@@ -1224,37 +1311,140 @@ async function viewBot() {
         <div class="row gap wrap">
           <label class="field"><span>Send to</span>
             <select id="botAudience">
-              ${groups.map(c => `<option value="group:${h(c.chat_id)}" ${draft.audience === 'group' ? 'selected' : ''}>Group: ${h(c.title || c.chat_id)}</option>`).join('')}
-              <option value="subscribers" ${draft.audience === 'subscribers' ? 'selected' : ''}>Everyone who started the bot (${activePeople.length})</option>
+              ${st.groups.map(c => `<option value="group:${h(c.chat_id)}" ${draft.audience === 'group' ? 'selected' : ''}>Group: ${h(c.title || c.chat_id)}</option>`).join('')}
+              <option value="subscribers" ${draft.audience === 'subscribers' ? 'selected' : ''}>Everyone who started the bot (${st.subscribers})</option>
+              <option value="person" ${draft.audience === 'person' ? 'selected' : ''}>One person…</option>
               <option value="admins" ${draft.audience === 'admins' ? 'selected' : ''}>Admins only (test)</option>
             </select>
           </label>
+          <label class="field" id="personField" hidden><span>Person</span><select id="botPerson"><option value="">Loading…</option></select></label>
           <label class="field"><span>Type</span>
-            <select id="botKind">
-              ${['announcement', 'game', 'update'].map(k => `<option value="${k}" ${draft.kind === k ? 'selected' : ''}>${{ announcement: 'Announcement', game: 'Game summary', update: 'Update' }[k]}</option>`).join('')}
-            </select>
+            <select id="botKind">${Object.entries(BOT_KINDS).map(([k, l]) => `<option value="${k}" ${draft.kind === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
           </label>
-          <div class="field"><span>Templates</span>
-            <div class="row gap wrap">
-              <button class="btn small ghost" data-tpl="mystats">/mystats how-to</button>
-              <button class="btn small ghost" data-tpl="game">Game night</button>
-              <button class="btn small ghost" data-tpl="update">Site update</button>
-            </div>
-          </div>
         </div>
-        <textarea id="botText" rows="9" maxlength="4000" placeholder="Write your message… (plain text, emojis welcome)">${h(draft.text || '')}</textarea>
+        <div class="row gap wrap tpl-row">
+          <span class="lbl">Templates</span>
+          ${BOT_TEMPLATES.map(t => `<button class="btn small ghost" data-tpl="${t.key}">${t.label}</button>`).join('')}
+          <label class="field inline"><span>Game day</span><select id="tplDay">${days.map(d => `<option value="${d}">${isoToDmy(d)}</option>`).join('') || '<option value="">—</option>'}</select></label>
+        </div>
+        <textarea id="botText" rows="12" maxlength="4000" placeholder="Write your message… (plain text, emojis welcome)">${h(draft.text || '')}</textarea>
         <div class="row gap wrap"><span class="muted small" id="botCount"></span><span class="spacer"></span><button class="btn primary" id="botSend">Send</button></div>
       </section>
     </div>
 
-    <h2 class="section-title">History <span class="muted small">newest first</span></h2>
-    ${st.posts.length ? st.posts.map(p => {
+    <div class="tabs" role="tablist">
+      <button class="tab ${T.active === 'history' ? 'on' : ''}" data-tab="history">History</button>
+      <button class="tab ${T.active === 'chats' ? 'on' : ''}" data-tab="chats">Who receives messages</button>
+      <span class="spacer"></span>
+      <button class="btn small ghost" id="tabRefresh" ${T[T.active] ? '' : 'hidden'}>↻ Refresh</button>
+    </div>
+    <div id="tabBody"></div>
+  `;
+
+  /* ---- commands preview ---- */
+  const preview = () => attempt(async () => {
+    UI.botCmd = UI.botCmd || '/mystats';
+    UI.botCmdPlayer = $('#cmdPlayer').value || null;
+    $('#cmdPreview').innerHTML = '<span class="muted small">Loading…</span>';
+    const r = await Store.bot.preview(UI.botCmd, UI.botCmdPlayer);
+    // the answer is our own HTML (names are escaped on the server); Telegram shows line breaks as-is
+    if ($('#cmdPreview')) $('#cmdPreview').innerHTML = `<div class="tg-bubble">${r.html.replace(/\n/g, '<br>')}</div>`;
+  });
+  $$('[data-cmd]').forEach(b => b.onclick = () => { UI.botCmd = b.dataset.cmd; $$('[data-cmd]').forEach(x => x.classList.toggle('on', x === b)); preview(); });
+  $('#cmdPlayer').onchange = preview;
+  preview();
+
+  /* ---- compose ---- */
+  const text = $('#botText');
+  const count = () => { $('#botCount').textContent = `${text.value.length} / 4000`; };
+  text.oninput = count; count();
+  const loadChats = async () => { if (!T.chats) T.chats = (await Store.bot.chats()).chats; return T.chats; };
+  const syncAudience = () => attempt(async () => {
+    const isPerson = $('#botAudience').value === 'person';
+    $('#personField').hidden = !isPerson;
+    if (!isPerson) return;
+    const people = (await loadChats()).filter(c => c.status === 'active');
+    $('#botPerson').innerHTML = people.length
+      ? people.map(c => `<option value="${h(c.chat_id)}" ${c.chat_id === draft.chatId ? 'selected' : ''}>${h(c.nickname || c.title || c.chat_id)}${c.username ? ' @' + h(c.username) : ''}${c.nickname ? '' : ' (not linked)'}</option>`).join('')
+      : '<option value="">Nobody has pressed Start yet</option>';
+    if (T.active === 'chats') renderTab();
+  });
+  $('#botAudience').onchange = syncAudience;
+  syncAudience();
+  $$('[data-tpl]').forEach(b => b.onclick = () => {
+    const t = BOT_TEMPLATES.find(x => x.key === b.dataset.tpl);
+    const val = t.make($('#tplDay').value);
+    if (!val) { toast('No finished games for this template yet'); return; }
+    if (text.value.trim() && !confirm('Replace the current text with the template?')) return;
+    text.value = val; count();
+    $('#botKind').value = t.kind;
+  });
+  $('#botSetup').onclick = () => attempt(async () => { await Store.bot.setup(); toast('Bot connected'); viewBot(); });
+
+  // sending happens in batches: keep asking the server until nothing is left
+  const drain = async (id, label) => {
+    let r = { remaining: 1 }, guard = 0;
+    while (r.remaining > 0 && guard++ < 50) { r = await Store.bot.process(id); if (r.remaining) toast(`${label}… ${r.remaining} left`); }
+  };
+  const afterChange = async () => { if (T.history) { T.history = (await Store.bot.posts()).posts; if (T.active === 'history') renderTab(); } };
+  $('#botSend').onclick = () => attempt(async () => {
+    const val = $('#botAudience').value;
+    if (!val) throw new Error('Choose who receives it');
+    const [audience, chatId] = val.startsWith('group:') ? ['group', val.slice(6)] : val === 'person' ? ['person', $('#botPerson').value] : [val, null];
+    if (audience === 'person' && !chatId) throw new Error('Choose the person');
+    const who = audience === 'group' || audience === 'person'
+      ? (audience === 'person' ? $('#botPerson') : $('#botAudience')).selectedOptions[0].textContent
+      : audience === 'subscribers' ? `${st.subscribers} people who started the bot` : 'admins only';
+    if (!text.value.trim()) throw new Error('The message is empty');
+    if (!confirm(`Send this message to ${who}?`)) return;
+    $('#botSend').disabled = true;
+    const r = await Store.bot.send({ text: text.value, audience, chatId, kind: $('#botKind').value, gameId: draft.gameId || null });
+    if (r.remaining) await drain(r.id, 'Sending');
+    UI.botDraft = null;
+    text.value = ''; count();
+    toast('Sent');
+    await afterChange();
+  }).finally(() => { if ($('#botSend')) $('#botSend').disabled = false; });
+
+  /* ---- tabs: History / Who receives messages ---- */
+  const fmtWhen = t => t ? new Date(t.replace(' ', 'T') + 'Z').toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '';
+  const age = t => (Date.now() - new Date(t.replace(' ', 'T') + 'Z').getTime()) / 3600e3;
+  const audienceLabel = p => p.audience === 'person' ? `To ${p.first_title || 'one person'}` : ({ group: 'Group', subscribers: 'Subscribers', admins: 'Admins' }[p.audience] || p.audience);
+  const load = key => attempt(async () => {
+    $('#tabBody').innerHTML = '<div class="card muted">Loading…</div>';
+    if (key === 'history') T.history = (await Store.bot.posts()).posts;
+    else T.chats = (await Store.bot.chats()).chats;
+    renderTab();
+  });
+  function renderTab() {
+    const key = T.active, data = T[key];
+    $('#tabRefresh').hidden = !data;
+    if (!data) {
+      $('#tabBody').innerHTML = `<div class="card tab-empty"><p class="muted">${key === 'history' ? 'Sent posts, newest first.' : 'People who pressed Start in the bot.'} Not loaded yet.</p><button class="btn" id="tabLoad">Load ${key === 'history' ? 'history' : 'list'}</button></div>`;
+      $('#tabLoad').onclick = () => load(key);
+      return;
+    }
+    if (key === 'chats') {
+      const active = data.filter(c => c.status === 'active').length;
+      $('#tabBody').innerHTML = `<section class="card">
+        <p class="muted small">${active} receive messages · only people who pressed <b>Start</b>. Linked players can use /mystats.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Telegram</th><th>Player</th><th>Since</th><th></th></tr></thead>
+          <tbody>${data.map(c => `<tr class="${c.status === 'active' ? '' : 'dead'}">
+            <td>${h(c.title || '')} ${c.username ? `<span class="muted">@${h(c.username)}</span>` : ''}</td>
+            <td>${c.nickname ? h(c.nickname) : '<a href="/players" class="muted small">not linked</a>'}${c.role === 'admin' ? ' <span class="chip admin">admin</span>' : ''}</td>
+            <td class="muted small">${h(isoToDmy((c.started_at || '').slice(0, 10)))}</td>
+            <td class="muted small">${c.status === 'active' ? '' : 'stopped'}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Nobody yet.</td></tr>'}</tbody>
+        </table></div></section>`;
+      return;
+    }
+    $('#tabBody').innerHTML = data.length ? data.map(p => {
       const old = age(p.created_at) > 48;
       return `<section class="card post ${p.deleted_at ? 'deleted' : ''}" data-post="${p.id}">
         <div class="row gap wrap post-head">
           <b>${fmtWhen(p.created_at)}</b>
-          <span class="chip">${audienceLabel(p)}</span>
-          <span class="chip muted">${h(p.kind)}</span>
+          <span class="chip">${h(audienceLabel(p))}</span>
+          <span class="chip muted">${h(BOT_KINDS[p.kind] || p.kind)}</span>
           ${p.deleted_at ? '<span class="chip loss">deleted</span>' : ''}
           ${p.edited_at ? `<span class="muted small">edited ${fmtWhen(p.edited_at)}</span>` : ''}
           <span class="spacer"></span>
@@ -1268,62 +1458,39 @@ async function viewBot() {
           <button class="btn small ghost danger-text" data-del-post="${p.id}" ${old ? 'title="Telegram only allows deleting messages within 48 hours — it will be removed from this list, but may stay in Telegram"' : ''}>Delete${old ? ' (older than 48 h)' : ''}</button>
         </div>`}
       </section>`;
-    }).join('') : '<div class="card muted">Nothing sent yet.</div>'}
-  `;
+    }).join('') : '<div class="card muted">Nothing sent yet.</div>';
 
-  const text = $('#botText');
-  const count = () => { $('#botCount').textContent = `${text.value.length} / 4000`; };
-  text.oninput = count; count();
-  $$('[data-tpl]').forEach(b => b.onclick = () => {
-    if (text.value.trim() && !confirm('Replace the current text with the template?')) return;
-    text.value = BOT_TEMPLATES[b.dataset.tpl](); count();
-    $('#botKind').value = b.dataset.tpl === 'update' || b.dataset.tpl === 'mystats' ? 'update' : 'announcement';
-  });
-  $('#botSetup').onclick = () => attempt(async () => { await Store.bot.setup(); toast('Bot connected'); viewBot(); });
-
-  // send in batches until done
-  const drain = async (id, label) => {
-    let r = { remaining: 1 }, guard = 0;
-    while (r.remaining > 0 && guard++ < 50) { r = await Store.bot.process(id); if (r.remaining) toast(`${label}… ${r.remaining} left`); }
-  };
-  $('#botSend').onclick = () => attempt(async () => {
-    const val = $('#botAudience').value;
-    if (!val) throw new Error('Choose who receives it');
-    const [audience, chatId] = val.startsWith('group:') ? ['group', val.slice(6)] : [val, null];
-    const who = audience === 'group' ? $('#botAudience').selectedOptions[0].textContent : audience === 'subscribers' ? `${activePeople.length} people who started the bot` : 'admins only';
-    if (!text.value.trim()) throw new Error('The message is empty');
-    if (!confirm(`Send this message to ${who}?`)) return;
-    $('#botSend').disabled = true;
-    const r = await Store.bot.send({ text: text.value, audience, chatId, kind: $('#botKind').value, gameId: draft.gameId || null });
-    if (r.remaining) await drain(r.id, 'Sending');
-    UI.botDraft = null;
-    toast('Sent');
-    viewBot();
-  }).finally(() => { if ($('#botSend')) $('#botSend').disabled = false; });
-
-  $$('[data-continue]').forEach(b => b.onclick = () => attempt(async () => { await drain(+b.dataset.continue, 'Sending'); viewBot(); }));
-  $$('[data-edit-post]').forEach(b => b.onclick = () => {
-    const card = b.closest('.post');
-    const p = st.posts.find(x => x.id === +b.dataset.editPost);
-    card.querySelector('.post-text').outerHTML = `<textarea class="post-edit" rows="7" maxlength="4000">${h(p.text)}</textarea>`;
-    b.outerHTML = `<button class="btn small primary" data-save-post="${p.id}">Save edit</button>`;
-    card.querySelector('[data-save-post]').onclick = () => attempt(async () => {
-      const t = card.querySelector('.post-edit').value;
-      if (!confirm(`Update this message in Telegram (${p.sent} chat${p.sent === 1 ? '' : 's'})?`)) return;
-      const r = await Store.bot.edit(p.id, t);
-      if (r.remaining) await drain(p.id, 'Updating');
-      toast('Updated');
-      viewBot();
+    $$('[data-continue]').forEach(b => b.onclick = () => attempt(async () => { await drain(+b.dataset.continue, 'Sending'); await afterChange(); }));
+    $$('[data-edit-post]').forEach(b => b.onclick = () => {
+      const card = b.closest('.post');
+      const p = data.find(x => x.id === +b.dataset.editPost);
+      card.querySelector('.post-text').outerHTML = `<textarea class="post-edit" rows="7" maxlength="4000">${h(p.text)}</textarea>`;
+      b.outerHTML = `<button class="btn small primary" data-save-post="${p.id}">Save edit</button>`;
+      card.querySelector('[data-save-post]').onclick = () => attempt(async () => {
+        const t = card.querySelector('.post-edit').value;
+        if (!confirm(`Update this message in Telegram (${p.sent} chat${p.sent === 1 ? '' : 's'})?`)) return;
+        const r = await Store.bot.edit(p.id, t);
+        if (r.remaining) await drain(p.id, 'Updating');
+        toast('Updated');
+        await afterChange();
+      });
     });
+    $$('[data-del-post]').forEach(b => b.onclick = () => attempt(async () => {
+      const p = data.find(x => x.id === +b.dataset.delPost);
+      if (!confirm(`Delete this message from Telegram (${p.sent} chat${p.sent === 1 ? '' : 's'})?`)) return;
+      const r = await Store.bot.remove(p.id);
+      if (r.remaining) await drain(p.id, 'Deleting');
+      toast('Deleted');
+      await afterChange();
+    }));
+  }
+  $$('[data-tab]').forEach(b => b.onclick = () => {
+    T.active = b.dataset.tab;
+    $$('[data-tab]').forEach(x => x.classList.toggle('on', x === b));
+    renderTab();
   });
-  $$('[data-del-post]').forEach(b => b.onclick = () => attempt(async () => {
-    const p = st.posts.find(x => x.id === +b.dataset.delPost);
-    if (!confirm(`Delete this message from Telegram (${p.sent} chat${p.sent === 1 ? '' : 's'})?`)) return;
-    const r = await Store.bot.remove(p.id);
-    if (r.remaining) await drain(p.id, 'Deleting');
-    toast('Deleted');
-    viewBot();
-  }));
+  $('#tabRefresh').onclick = () => load(T.active);
+  renderTab();
 }
 
 /* ---------- start ---------- */

@@ -313,7 +313,10 @@ const Store = (() => {
   const backupNow = () => api('/api/admin/backups', { method: 'POST', body: {} });
   const notifyTest = () => api('/api/admin/notify-test', { method: 'POST', body: {} });
   const bot = {
-    state: () => api('/api/admin/bot'),
+    status: () => api('/api/admin/bot'),
+    chats: () => api('/api/admin/bot/chats'),
+    posts: () => api('/api/admin/bot/posts'),
+    preview: (command, playerId) => api('/api/admin/bot/preview', { method: 'POST', body: { command, playerId } }),
     setup: () => api('/api/admin/bot/setup', { method: 'POST', body: {} }),
     send: post => api('/api/admin/bot/posts', { method: 'POST', body: post }),
     process: id => api(`/api/admin/bot/posts/${id}/process`, { method: 'POST', body: {} }),

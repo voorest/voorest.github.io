@@ -349,3 +349,18 @@ body:has(.savebar) #toast { bottom: 84px; }
 .date-field input[type=text] { width: 8.5em; }
 .date-field .date-pick { background: none; border: 0; cursor: pointer; font-size: 1.1em; padding: 4px; line-height: 1; }
 .date-field .date-native { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; border: 0; padding: 0; }
+
+/* Bot page: commands preview, templates row, tabs */
+.cmd-list { display: grid; gap: .35rem; margin: .5rem 0 .8rem; }
+.cmd { display: flex; gap: .6rem; align-items: baseline; text-align: left; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: .45rem .7rem; cursor: pointer; font: inherit; }
+.cmd code { color: var(--accent); font-weight: 600; min-width: 5.5em; }
+.cmd.on { border-color: var(--accent); }
+.tg-preview { margin-top: .7rem; }
+.tg-bubble { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px 12px 12px 4px; padding: .7rem .9rem; font-size: .95rem; line-height: 1.45; overflow-wrap: anywhere; }
+.tpl-row { margin-top: .7rem; align-items: center; }
+.tpl-row .lbl { color: var(--muted); font-size: .85rem; }
+.tabs { display: flex; gap: .3rem; align-items: center; margin: 1.75rem 0 .75rem; border-bottom: 1px solid var(--border); }
+.tab { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font: inherit; font-weight: 600; padding: .55rem .9rem; cursor: pointer; margin-bottom: -1px; }
+.tab.on { color: var(--text); border-bottom-color: var(--accent); }
+.tab-empty { display: flex; gap: 1rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.tab-empty p { margin: 0; }

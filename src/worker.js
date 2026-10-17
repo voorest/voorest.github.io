@@ -25,9 +25,12 @@
  *   POST   /api/admin/backups          make a backup now
  *   GET    /api/admin/backups/:name    download a stored backup
  *   POST   /api/admin/notify-test      send a test message to admins' Telegram
- *   GET    /api/admin/bot              bot status, chats (subscribers + groups), post history
+ *   GET    /api/admin/bot              bot status: connection, groups, number of subscribers
+ *   GET    /api/admin/bot/chats        people who pressed Start (with linked player)
+ *   GET    /api/admin/bot/posts        sent posts, newest first
+ *   POST   /api/admin/bot/preview      what the bot answers to a command { command, playerId? } (nothing is sent)
  *   POST   /api/admin/bot/setup        connect the webhook + commands (run once from the live site)
- *   POST   /api/admin/bot/posts        send a post { text, audience: group|subscribers|admins, chatId?, kind?, gameId? }
+ *   POST   /api/admin/bot/posts        send a post { text, audience: group|subscribers|admins|person, chatId?, kind?, gameId? }
  *   POST   /api/admin/bot/posts/:id/process   continue sending (40 per call)
  *   PUT    /api/admin/bot/posts/:id    edit a sent post { text }
  *   DELETE /api/admin/bot/posts/:id    delete a sent post (Telegram: within 48 h)
@@ -41,7 +44,7 @@
  *   TELEGRAM_BOT_TOKEN                           from @BotFather (bot messages, later)
  */
 
-import { BotError, handleWebhook, botState, botSetup, createPost, processPost, editPost, deletePost } from './bot.js';
+import { BotError, handleWebhook, botStatus, botChats, botPosts, botPreview, botSetup, createPost, processPost, editPost, deletePost } from './bot.js';
 
 const ROLES = ['citizen', 'sheriff', 'doctor', 'maniac', 'mafia', 'don'];
 const NIGHT_KINDS = { mafiaKill: 'mafia_kill', donCheck: 'don_check', sheriffCheck: 'sheriff_check', maniacKill: 'maniac_kill', doctorHeal: 'doctor_heal' };
@@ -607,17 +610,17 @@ async function alertAdmins(env, message) {
       if (await env.KV.get('alert:last')) return;
       await env.KV.put('alert:last', new Date().toISOString(), { expirationTtl: 3600 });
     }
-    await notifyAdmins(env, `⚠️ <b>Mafia BCN site error</b>\n${esc(message).slice(0, 500)}\n\n(further alerts muted for 1 hour)`);
+    await notifyAdmins(env, `⚠️ <b>Помилка на сайті Mafia BCN</b>\n${esc(message).slice(0, 500)}\n\n(наступні сповіщення вимкнено на 1 годину)`);
   } catch (e) { console.error('alert failed', e); }
 }
 
 async function weeklyBackup(env) {
   try {
     const b = await makeBackup(env, 'weekly');
-    await notifyAdmins(env, `✅ <b>Weekly backup saved</b>\n${b.games} games · ${b.players} players · ${Math.round(b.size / 1024)} KB\nThe last ${KEEP.weekly} weekly backups are kept (Data page → Backups).`);
+    await notifyAdmins(env, `✅ <b>Щотижнева резервна копія збережена</b>\nІгор: ${b.games} · гравців: ${b.players} · ${Math.round(b.size / 1024)} KB\nЗберігаються останні ${KEEP.weekly} щотижневих копій (сторінка Data → Backups).`);
   } catch (e) {
     console.error('weekly backup failed', e);
-    await notifyAdmins(env, `❌ <b>Weekly backup failed</b>\n${esc(e.message || e)}`).catch(() => {});
+    await notifyAdmins(env, `❌ <b>Не вдалося зробити щотижневу резервну копію</b>\n${esc(e.message || e)}`).catch(() => {});
   }
 }
 
@@ -676,15 +679,20 @@ async function api(request, env, url) {
       if (!value) throw new HttpError(404, 'Backup not found');
       return new Response(value, { headers: { 'content-type': 'application/json; charset=utf-8', 'content-disposition': `attachment; filename="mafia-bcn-backup-${bm[1]}.json"`, 'cache-control': 'no-store' } });
     }
-    if (path === '/api/admin/bot' && method === 'GET') return json(await botState(env, url.origin));
-    if (path === '/api/admin/bot/setup' && method === 'POST') { await botSetup(env, url); return json(await botState(env, url.origin)); }
+    if (path === '/api/admin/bot' && method === 'GET') return json(await botStatus(env, url.origin));
+    if (path === '/api/admin/bot/chats' && method === 'GET') return json(await botChats(env));
+    if (path === '/api/admin/bot/posts' && method === 'GET') return json(await botPosts(env));
+    if (path === '/api/admin/bot/preview' && method === 'POST') {
+      return json(await botPreview(env, await readBody(request), { origin: url.origin, publicData: async () => JSON.parse((await publicSnapshot(env)).body) }));
+    }
+    if (path === '/api/admin/bot/setup' && method === 'POST') { await botSetup(env, url); return json(await botStatus(env, url.origin)); }
     if (path === '/api/admin/bot/posts' && method === 'POST') return json(await createPost(env, admin, await readBody(request)), 201);
     const pm = path.match(/^\/api\/admin\/bot\/posts\/(\d+)(\/process)?$/);
     if (pm && method === 'POST' && pm[2]) return json(await processPost(env, +pm[1]));
     if (pm && method === 'PUT' && !pm[2]) return json(await editPost(env, +pm[1], await readBody(request)));
     if (pm && method === 'DELETE' && !pm[2]) return json(await deletePost(env, +pm[1]));
     if (path === '/api/admin/notify-test' && method === 'POST') {
-      return json({ results: await notifyAdmins(env, `👋 Test message from <b>Mafia BCN</b>. Backup reports and alerts will arrive here.`) });
+      return json({ results: await notifyAdmins(env, `👋 Тестове повідомлення від <b>Mafia BCN</b>. Сюди приходитимуть звіти про резервні копії та сповіщення про помилки.`) });
     }
     const m = path.match(/^\/api\/admin\/(players|accounts|games|settings|backup)(?:\/(\d+))?$/);
     if (!m) throw new HttpError(404, 'Not found');

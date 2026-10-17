@@ -14,7 +14,9 @@
  */
 
 const TOWN = new Set(['citizen', 'sheriff', 'doctor', 'maniac']);
-const ROLE_LABEL = { citizen: 'Citizen', sheriff: 'Sheriff', doctor: 'Doctor', maniac: 'Maniac', mafia: 'Mafia', don: 'Don' };
+// Bot messages are in Ukrainian (the website stays in English)
+const ROLE_LABEL = { citizen: 'Мирний', sheriff: 'Шериф', doctor: 'Лікар', maniac: 'Маніяк', mafia: 'Мафія', don: 'Дон' };
+const MONTHS = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня', 'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];
 const BATCH = 40;
 
 export class BotError extends Error {
@@ -112,38 +114,46 @@ async function onMessage(env, msg, deps) {
 
   if (cmd === '/stop' && isPrivate) {
     await saveChat(env, chat, 'blocked');
-    return reply('You will not receive announcements any more. Send /start to subscribe again.');
+    return reply(commandReply('/stop', {}));
   }
 
   const acc = await ensureAccount(env, msg.from);
   if (isPrivate && cmd !== '/stop') await saveChat(env, chat, 'active');
-  const site = env.SITE_URL || deps.origin;
+  if (!['/start', '/help', '/mystats'].includes(cmd)) return;
+  const linked = acc && acc.player_id ? await env.DB.prepare('SELECT nickname FROM players WHERE id = ?').bind(acc.player_id).first() : null;
+  return reply(commandReply(cmd, {
+    firstName: msg.from.first_name, isPrivate,
+    playerId: acc && acc.player_id ? String(acc.player_id) : null,
+    nickname: linked ? linked.nickname : null,
+    site: env.SITE_URL || deps.origin,
+    data: cmd === '/mystats' && acc && acc.player_id ? await deps.publicData() : null,
+  }));
+}
 
+/** The bot's answer to a command (HTML). Used by the webhook and by the admin preview on the Bot page. */
+export function commandReply(cmd, { firstName, isPrivate = true, playerId, nickname, site, data }) {
+  if (cmd === '/stop') return 'Ви більше не отримуватимете повідомлень. Щоб підписатися знову, надішліть /start.';
   if (cmd === '/start' || cmd === '/help') {
-    const linked = acc && acc.player_id ? await env.DB.prepare('SELECT nickname FROM players WHERE id = ?').bind(acc.player_id).first() : null;
     const lines = [
-      `👋 Hi${msg.from.first_name ? ' ' + escHtml(msg.from.first_name) : ''}! This is the <b>Mafia BCN</b> bot.`,
+      `👋 Привіт${firstName ? ', ' + escHtml(firstName) : ''}! Це бот <b>Mafia BCN</b>.`,
       '',
-      isPrivate ? '✅ You will receive our announcements here.' : '',
+      isPrivate ? '✅ Тут ви отримуватимете наші оголошення.' : '',
       '',
-      '<b>Commands</b>',
-      '/mystats — your games, wins, rating and rank',
-      '/stop — stop announcements',
+      '<b>Команди</b>',
+      '/mystats — ваші ігри, перемоги, рейтинг і місце',
+      '/stop — не отримувати оголошення',
       '',
-      linked ? `🔗 Your Telegram is linked to player <b>${escHtml(linked.nickname)}</b>.`
-             : '🔗 Your Telegram is not linked to a player yet — ask the game master (@voorest) to link you, or log in once on the website.',
+      playerId ? `🔗 Ваш Telegram прив'язаний до гравця <b>${escHtml(nickname || '')}</b>.`
+               : "🔗 Ваш Telegram ще не прив'язаний до гравця. Напишіть ведучому (@voorest), і він вас прив'яже.",
       `🌐 ${site}`,
     ].filter((l, i, a) => !(l === '' && a[i - 1] === ''));
-    return reply(lines.join('\n'));
+    return lines.join('\n');
   }
-
   if (cmd === '/mystats') {
-    if (!acc || !acc.player_id) {
-      return reply('🔗 Your Telegram is not linked to a player yet.\nAsk the game master (@voorest) to link you — then /mystats will show your stats.');
-    }
-    const data = await deps.publicData();
-    return reply(playerStatsText(data, String(acc.player_id), site));
+    if (!playerId) return "🔗 Ваш Telegram ще не прив'язаний до гравця.\nНапишіть ведучому (@voorest), і він вас прив'яже. Тоді /mystats покаже вашу статистику.";
+    return playerStatsText(data || {}, playerId, site);
   }
+  return '';
 }
 
 /** Short stats summary for one player, from the public data copy (same rating rule as the website). */
@@ -169,40 +179,30 @@ export function playerStatsText(data, pid, site) {
   const ranked = Object.entries(per).sort((a, b) => rating(b[1]) - rating(a[1]));
   const me = per[pid];
   const player = (data.players || []).find(p => p.id === pid) || {};
-  const name = escHtml(player.nickname || 'you');
-  if (!me) return `📊 <b>${name}</b>\nNo finished games yet.\n${site}/player/${player.number || pid}`;
+  const name = escHtml(player.nickname || 'гравець');
+  if (!me) return `📊 <b>${name}</b>\nЩе немає завершених ігор.\n${site}/player/${player.number || pid}`;
   const pct = x => Math.round(x * 100) + '%';
   const roles = Object.entries(me.roles).sort((a, b) => b[1].g - a[1].g).map(([r, v]) => `${ROLE_LABEL[r] || r} ${v.w}/${v.g}`).join(' · ');
-  const d = new Date(me.last.date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  const [y, m, d] = me.last.date.split('-').map(Number);
   return [
-    `📊 <b>${name}</b> (No. ${player.number || pid})`,
-    `🏅 Rank #${ranked.findIndex(([id]) => id === pid) + 1} of ${ranked.length} · rating ${pct(rating(me))}`,
-    `🎲 Games ${me.g} · wins ${me.w} (${pct(me.w / me.g)})`,
+    `📊 <b>${name}</b> (№ ${player.number || pid})`,
+    `🏅 Місце ${ranked.findIndex(([id]) => id === pid) + 1} з ${ranked.length} · рейтинг ${pct(rating(me))}`,
+    `🎲 Ігор ${me.g} · перемог ${me.w} (${pct(me.w / me.g)})`,
     `🎭 ${roles}`,
-    `🕒 Last game: ${d} — ${me.last.won ? 'won' : 'lost'} as ${ROLE_LABEL[me.last.role] || me.last.role}`,
+    `🕒 Остання гра: ${d} ${MONTHS[m - 1]} ${y} — ${me.last.won ? 'перемога' : 'поразка'} (${ROLE_LABEL[me.last.role] || me.last.role})`,
     '',
-    `Full stats: ${site}/player/${player.number || pid}`,
+    `Уся статистика: ${site}/player/${player.number || pid}`,
   ].join('\n');
 }
 
 /* ============================================================
    Admin: state, setup, posts
    ============================================================ */
-export async function botState(env, origin) {
-  const [chats, posts] = await env.DB.batch([
-    env.DB.prepare(`SELECT c.chat_id, c.type, c.title, c.username, c.status, c.started_at, c.updated_at, p.nickname, a.role
-                      FROM bot_chats c
-                      LEFT JOIN accounts a ON a.provider = 'telegram' AND a.provider_uid = c.chat_id
-                      LEFT JOIN players p ON p.id = a.player_id
-                     ORDER BY c.type = 'private', c.updated_at DESC`),
-    env.DB.prepare(`SELECT b.*,
-                      (SELECT count(*) FROM bot_post_messages m WHERE m.post_id = b.id) AS total,
-                      (SELECT count(*) FROM bot_post_messages m WHERE m.post_id = b.id AND m.state = 'sent') AS sent,
-                      (SELECT count(*) FROM bot_post_messages m WHERE m.post_id = b.id AND m.state = 'failed') AS failed,
-                      (SELECT count(*) FROM bot_post_messages m WHERE m.post_id = b.id AND m.state LIKE 'pending%') AS pending,
-                      (SELECT count(*) FROM bot_post_messages m WHERE m.post_id = b.id AND m.state = 'deleted') AS deleted,
-                      (SELECT group_concat(DISTINCT m.error) FROM bot_post_messages m WHERE m.post_id = b.id AND m.error IS NOT NULL) AS errors
-                    FROM bot_posts b ORDER BY b.id DESC LIMIT 200`),
+/** Light status for the top of the Bot page: connection + groups + how many people receive messages. */
+export async function botStatus(env, origin) {
+  const [groups, people] = await env.DB.batch([
+    env.DB.prepare("SELECT chat_id, type, title FROM bot_chats WHERE type IN ('group', 'supergroup') AND status = 'active' ORDER BY updated_at DESC"),
+    env.DB.prepare("SELECT count(*) AS n FROM bot_chats WHERE type = 'private' AND status = 'active'"),
   ]);
   let webhook = null;
   if (env.TELEGRAM_BOT_TOKEN) {
@@ -213,8 +213,48 @@ export async function botState(env, origin) {
     tokenSet: !!env.TELEGRAM_BOT_TOKEN,
     expectedUrl: `${origin}/api/telegram/webhook`,
     webhook,
-    chats: chats.results,
-    posts: posts.results,
+    groups: groups.results,
+    subscribers: people.results[0].n,
+  };
+}
+
+/** Everyone who ever pressed Start (loaded on demand by the "Who receives messages" tab). */
+export async function botChats(env) {
+  const { results } = await env.DB.prepare(`SELECT c.chat_id, c.type, c.title, c.username, c.status, c.started_at, c.updated_at, p.nickname, a.role
+                      FROM bot_chats c
+                      LEFT JOIN accounts a ON a.provider = 'telegram' AND a.provider_uid = c.chat_id
+                      LEFT JOIN players p ON p.id = a.player_id
+                     WHERE c.type = 'private'
+                     ORDER BY c.status = 'active' DESC, c.updated_at DESC`).all();
+  return { chats: results };
+}
+
+/** Sent posts, newest first (loaded on demand by the "History" tab). */
+export async function botPosts(env) {
+  const { results } = await env.DB.prepare(`SELECT b.*,
+                      (SELECT count(*) FROM bot_post_messages m WHERE m.post_id = b.id) AS total,
+                      (SELECT count(*) FROM bot_post_messages m WHERE m.post_id = b.id AND m.state = 'sent') AS sent,
+                      (SELECT count(*) FROM bot_post_messages m WHERE m.post_id = b.id AND m.state = 'failed') AS failed,
+                      (SELECT count(*) FROM bot_post_messages m WHERE m.post_id = b.id AND m.state LIKE 'pending%') AS pending,
+                      (SELECT count(*) FROM bot_post_messages m WHERE m.post_id = b.id AND m.state = 'deleted') AS deleted,
+                      (SELECT group_concat(DISTINCT m.error) FROM bot_post_messages m WHERE m.post_id = b.id AND m.error IS NOT NULL) AS errors,
+                      (SELECT c.title FROM bot_post_messages m JOIN bot_chats c ON c.chat_id = m.chat_id WHERE m.post_id = b.id LIMIT 1) AS first_title
+                    FROM bot_posts b ORDER BY b.id DESC LIMIT 200`).all();
+  return { posts: results };
+}
+
+/** What the bot would answer to a command, as a given player (or as someone not linked). Nothing is sent. */
+export async function botPreview(env, body, deps) {
+  const cmd = String(body.command || '');
+  if (!['/start', '/help', '/mystats', '/stop'].includes(cmd)) throw new BotError(400, 'Unknown command');
+  const data = await deps.publicData();
+  const player = body.playerId ? (data.players || []).find(p => p.id === String(body.playerId)) : null;
+  return {
+    html: commandReply(cmd, {
+      firstName: player ? player.nickname : 'Олександр', isPrivate: true,
+      playerId: player ? player.id : null, nickname: player ? player.nickname : null,
+      site: env.SITE_URL || deps.origin, data,
+    }),
   };
 }
 
@@ -229,9 +269,9 @@ export async function botSetup(env, url) {
   if (!hook.ok) throw new BotError(502, 'Telegram: ' + hook.description);
   await tg(env, 'setMyCommands', {
     commands: [
-      { command: 'mystats', description: 'My Mafia BCN stats' },
-      { command: 'help', description: 'What this bot can do' },
-      { command: 'stop', description: 'Stop announcements' },
+      { command: 'mystats', description: 'Моя статистика в Mafia BCN' },
+      { command: 'help', description: 'Що вміє цей бот' },
+      { command: 'stop', description: 'Не отримувати оголошення' },
     ],
   });
   return { ok: true };
@@ -248,6 +288,10 @@ async function targetsFor(env, audience, chatId) {
     const { results } = await env.DB.prepare("SELECT chat_id FROM bot_chats WHERE type = 'private' AND status = 'active'").all();
     return results.map(r => r.chat_id);
   }
+  if (audience === 'person') {
+    const row = chatId ? await env.DB.prepare("SELECT chat_id FROM bot_chats WHERE chat_id = ? AND type = 'private' AND status = 'active'").bind(String(chatId)).first() : null;
+    return row ? [row.chat_id] : [];
+  }
   if (audience === 'admins') {
     const { results } = await env.DB.prepare("SELECT provider_uid AS chat_id FROM accounts WHERE role = 'admin' AND provider = 'telegram' AND provider_uid IS NOT NULL AND provider_uid != 'dev-admin'").all();
     return results.map(r => r.chat_id);
@@ -263,9 +307,10 @@ export async function createPost(env, admin, body) {
   const targets = await targetsFor(env, audience, body.chatId);
   if (!targets.length) {
     throw new BotError(400, audience === 'group' ? 'The bot is not in any group yet: add @mafia_bcn_bot to your group first.'
-      : audience === 'subscribers' ? 'Nobody has pressed Start in the bot yet.' : 'No admin with a Telegram account found.');
+      : audience === 'subscribers' ? 'Nobody has pressed Start in the bot yet.'
+      : audience === 'person' ? 'This person has not pressed Start in the bot (or stopped it).' : 'No admin with a Telegram account found.');
   }
-  const kind = ['announcement', 'game', 'update'].includes(body.kind) ? body.kind : 'announcement';
+  const kind = ['announcement', 'game', 'day', 'update', 'personal'].includes(body.kind) ? body.kind : 'announcement';
   const gameId = Number.isInteger(+body.gameId) && +body.gameId > 0 ? +body.gameId : null;
   const post = await env.DB.prepare('INSERT INTO bot_posts (kind, audience, text, game_id, created_by) VALUES (?, ?, ?, ?, ?) RETURNING id')
     .bind(kind, audience, text, gameId, admin.id).first();

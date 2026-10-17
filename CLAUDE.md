@@ -72,13 +72,16 @@ Sessions are stored in D1 as SHA-256 hashes; the cookie is HttpOnly.
 
 ## Telegram bot (@mafia_bcn_bot, `src/bot.js`)
 - Webhook `POST /api/telegram/webhook`. Its secret is derived from the bot token, so there is nothing extra to configure. Connect it once from the live site: Bot page → "Connect bot".
-- Commands: `/start` (subscribe + auto-link by the @username the admin pre-filled), `/mystats` (only for linked players), `/help`, `/stop`.
+- Commands (answers in Ukrainian): `/start` (subscribe + auto-link by the @username the admin pre-filled), `/mystats` (only for linked players), `/help`, `/stop`. Admin alerts (backup, errors) are in Ukrainian too.
 - **Only people who pressed Start receive messages.** The bot is added to the group by hand and remembered via `my_chat_member`.
-- Bot page (admin, live only):
-  - status, groups, subscribers with the linked player;
-  - compose to Group / Subscribers / Admins, with templates;
-  - history newest first, with Edit (any time) and Delete (Telegram: within 48 h).
-- Game page: "📣 Publish to Telegram" pre-fills a game summary.
+- Bot page (admin, live only), top part loads at once:
+  - **Status**: connection, groups, number of subscribers (`GET /api/admin/bot`, light).
+  - **Commands**: list + preview of the bot's answer as any player or as "not linked" (`POST /api/admin/bot/preview`, nothing is sent). Replies come from `commandReply()` in bot.js, the same function the webhook uses.
+  - **New post**: audience Group / Subscribers / One person (loads the list on demand) / Admins.
+  - **Templates**: Day stats (picked game day, agreed format, built in `dayStatsText`), Last game, Game night, Reminder, /mystats how-to, Welcome, Site update.
+  - Bottom tabs **History** and **Who receives messages** load only on a button press (`/bot/posts`, `/bot/chats`), with Refresh, and stay in memory until you leave the page.
+  - History: edit any time, delete within 48 h (Telegram).
+- Game page: "📣 Publish to Telegram" pre-fills the game in the agreed Ukrainian format (`gameBlockUk`). "⧉ Next game, same players" (also on the Games list per day) opens a draft of the next game that day with the same seats and players, roles empty.
 - Tables: `bot_chats`, `bot_posts`, `bot_post_messages` (message_id per chat, needed for edit/delete). Sends go out in batches of 40 per request (free plan allows 50 outgoing requests).
 
 ## Ratings (fair comparison, may be tuned)
@@ -87,8 +90,8 @@ Sessions are stored in D1 as SHA-256 hashes; the cookie is HttpOnly.
 - "± exp." = wins minus the wins expected from the roles a player received.
 - Titles: King (best rating, min games), Best Role Player (above average in 3+ roles), Best Sheriff/Don/Mafia/Citizen/Doctor/Maniac, Sharp Eye, Survivor, Most Loyal, Night Target.
 
-## Day stats post (agreed, not built yet)
-- A button per game day: "Send day stats to Telegram". It builds a draft for the admin to review, then posts it to a group topic.
+## Day stats post (template built; topic + hidden links still to do)
+- Bot page → template "Day stats" + game day → draft to review, then send. Still to do: post into a group topic, links hidden behind text.
 - Format, in Ukrainian:
   - header `Mafia BCN · DD/MM/YYYY` and a games score;
   - per game: `Гра #N — перемога мирних 🔴` / `перемога мафії ⚫`. The circle goes only in the header.
