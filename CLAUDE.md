@@ -13,7 +13,7 @@ Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (do
 - I (Claude) change the DB through the Cloudflare connector; schema changes are applied by hand. Also insert the migration name into `d1_migrations`.
 
 ## Domain
-- `SITE_URL` (wrangler `vars`) = https://mafiabcn.com. The `*.workers.dev` address is off (`workers_dev: false`, `preview_urls: false`). Pages on `www.` get a 301 to it; `/api/*` works on every host. `run_worker_first` covers only `/` and `/index.html`, so assets stay free.
+- `SITE_URL` (wrangler `vars`) = https://mafiabcn.com. The `*.workers.dev` address is off (`workers_dev: false`, `preview_urls: false`). Pages on `www.` or plain `http://` get a 301 to it; `/api/*` works on every host. `run_worker_first` covers only `/` and `/index.html`, so assets stay free.
 - BotFather Login Widget needs the redirect URL and trusted origin for each host people log in on.
 - Bot links use `SITE_URL`.
 
@@ -66,7 +66,7 @@ Sessions are stored in D1 as SHA-256 hashes; the cookie is HttpOnly.
 
 ## Backups & alerts
 - Cron every **Sunday 07:00 UTC** writes a full backup to KV and keeps 12 weekly + 5 manual.
-- Data page (admin): backups list (loads on "Show backups", with Refresh), Download, "Back up now", "Send test message".
+- Data page (admin): backups list (loads on "Show backups", with Refresh), Download, "Back up now".
 - D1 also has 7-day point-in-time restore. The admin downloads a copy into `data/` from time to time.
 - Telegram messages go **only to admin accounts** that pressed Start in @mafia_bcn_bot: backup report, error alerts (max 1/hour). The Bot API is free.
 

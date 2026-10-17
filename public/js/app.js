@@ -1059,7 +1059,6 @@ function viewData() {
         <p class="muted small">Every Sunday at 09:00 (08:00 in winter) a full backup is stored automatically; the last 12 are kept, plus the last 5 manual ones. You get a Telegram message each time.</p>
         <div class="row gap wrap">
           <button class="btn" id="backupNow">Back up now</button>
-          <button class="btn ghost" id="notifyTest">Send test message to my Telegram</button>
         </div>
         <div id="backupList" class="backup-list"><div class="row gap wrap"><span class="muted small">The list is not loaded yet.</span><button class="btn small" id="loadBackups">Show backups</button></div></div>
       </section>` : ''}
@@ -1100,13 +1099,6 @@ function viewData() {
     // The list is loaded only on request (saves a storage read every time the page opens)
     $('#loadBackups').onclick = renderBackups;
     $('#backupNow').onclick = () => attempt(async () => { const b = await Store.backupNow(); toast(`Backup saved (${b.games} games, ${Math.round(b.size / 1024)} KB)`); if (!$('#loadBackups')) renderBackups(); });
-    $('#notifyTest').onclick = () => attempt(async () => {
-      const r = await Store.notifyTest();
-      const bad = r.results.filter(x => !x.ok);
-      if (!r.results.length) toast('No admin Telegram account found');
-      else if (bad.length) toast('⚠ ' + bad.map(x => `@${x.to}: ${x.error}`).join('; ') + ' — open @mafia_bcn_bot and press Start');
-      else toast('Sent! Check Telegram');
-    });
   }
   if (live) return;
   $('#importJson').onchange = e => {

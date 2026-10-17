@@ -24,7 +24,6 @@
  *   GET    /api/admin/backups          list of stored backups (weekly + manual)
  *   POST   /api/admin/backups          make a backup now
  *   GET    /api/admin/backups/:name    download a stored backup
- *   POST   /api/admin/notify-test      send a test message to admins' Telegram
  *   GET    /api/admin/bot              bot status: connection, groups, number of subscribers
  *   GET    /api/admin/bot/chats        people who pressed Start (with linked player)
  *   GET    /api/admin/bot/posts        sent posts, newest first
@@ -631,7 +630,7 @@ function canonicalRedirect(request, env, url) {
   if (!env.SITE_URL || url.pathname.startsWith('/api/')) return null;
   if (!['GET', 'HEAD'].includes(request.method) || ['localhost', '127.0.0.1'].includes(url.hostname)) return null;
   const site = new URL(env.SITE_URL);
-  if (url.host === site.host) return null;
+  if (url.host === site.host && url.protocol === site.protocol) return null;   // also moves http:// to https://
   return Response.redirect(site.origin + url.pathname + url.search, 301);
 }
 
@@ -691,9 +690,6 @@ async function api(request, env, url) {
     if (pm && method === 'POST' && pm[2]) return json(await processPost(env, +pm[1]));
     if (pm && method === 'PUT' && !pm[2]) return json(await editPost(env, +pm[1], await readBody(request)));
     if (pm && method === 'DELETE' && !pm[2]) return json(await deletePost(env, +pm[1]));
-    if (path === '/api/admin/notify-test' && method === 'POST') {
-      return json({ results: await notifyAdmins(env, `👋 Тестове повідомлення від <b>Mafia BCN</b>. Сюди приходитимуть звіти про резервні копії та сповіщення про помилки.`) });
-    }
     const m = path.match(/^\/api\/admin\/(players|accounts|games|settings|backup)(?:\/(\d+))?$/);
     if (!m) throw new HttpError(404, 'Not found');
     const [, resource, id] = m;

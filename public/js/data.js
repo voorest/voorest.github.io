@@ -311,7 +311,6 @@ const Store = (() => {
 
   const listBackups = () => api('/api/admin/backups');
   const backupNow = () => api('/api/admin/backups', { method: 'POST', body: {} });
-  const notifyTest = () => api('/api/admin/notify-test', { method: 'POST', body: {} });
   const bot = {
     status: () => api('/api/admin/bot'),
     chats: () => api('/api/admin/bot/chats'),
@@ -335,7 +334,7 @@ const Store = (() => {
     onSaveState, replace, clear, saveLocal, logout,
     addPlayer, updatePlayer, deletePlayer, updateAccount, playerInUse, player, playerName,
     draftGame, saveGame, game, gameByDay, playerByNumber, deleteGame, sortedGames, overallNumber, saveSettings,
-    listBackups, backupNow, notifyTest, bot,
+    listBackups, backupNow, bot,
   };
 })();
 
