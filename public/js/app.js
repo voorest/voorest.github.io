@@ -1147,20 +1147,25 @@ function viewSettings() {
 /* ============================================================
    BOT — posts to the Telegram group / subscribers, history with edit & delete
    ============================================================ */
+/* Telegram texts are in Ukrainian (the site itself stays in English). */
+const UK_ROLE_LINES = [['don', 'Дон'], ['mafia', 'Мафія'], ['sheriff', 'Шериф'], ['doctor', 'Лікар'], ['maniac', 'Маніяк'], ['citizen', 'Мирні']];
+/** One game as text lines: header with the result circle, then players by role. Reused by the day stats post. */
+function gameBlockUk(g) {
+  const result = g.winner === 'town' ? 'перемога мирних 🔴' : g.winner === 'mafia' ? 'перемога мафії ⚫' : 'не завершена';
+  const lines = [`Гра #${g.number} — ${result}`];
+  for (const [role, label] of UK_ROLE_LINES) {
+    const names = g.seats.filter(s => s.role === role && s.playerId).map(s => Store.playerName(s.playerId));
+    if (names.length) lines.push(`${label}: ${names.join(', ')}`);
+  }
+  return lines;
+}
 function gameSummaryText(g) {
-  const tl = GameLogic.timeline(g);
-  const lines = g.seats.filter(s => s.playerId).map(s => {
-    const out = !tl.alive.includes(s.seat);
-    return `${s.seat}. ${Store.playerName(s.playerId)} — ${s.role ? ROLES[s.role].label : '?'}${out ? '' : ' ✅'}`;
-  });
   return [
-    `🎲 Game #${g.number} · ${fmtDate(g.date)} (overall #${Store.overallNumber(g)})`,
-    g.winner ? (g.winner === 'town' ? '🏆 Citizens won!' : '🏆 Mafia won!') : '',
+    `Mafia BCN · ${isoToDmy(g.date)}`,
     '',
-    'Seats and roles (✅ = alive at the end):',
-    ...lines,
+    ...gameBlockUk(g),
     '',
-    `Details and stats: ${location.origin}/${gameHref(g)}`,
+    `Деталі гри: ${location.origin}${gameHref(g)}`,
   ].join('\n');
 }
 
