@@ -31,6 +31,10 @@ function pct(x) {
   return x == null || isNaN(x) ? '—' : Math.round(x * 100) + '%';
 }
 
+/** Players per game: 7 to 16 (the server checks the same limits). */
+const SEATS_MIN = 7, SEATS_MAX = 16;
+const seatOptions = () => Array.from({ length: SEATS_MAX - SEATS_MIN + 1 }, (_, k) => k + SEATS_MIN);
+
 const DEFAULT_SETTINGS = { minGames: 3, priorWeight: 5, defaultSeats: 10 };
 
 /** Small JSON fetch helper for our API. Throws Error(message) on failure. */

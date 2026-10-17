@@ -26,7 +26,7 @@ Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (do
 ## Game rules as modelled
 - Roles: citizen (МИР), sheriff (Ш), doctor (ЛІК), **maniac (МАН) = citizens' team**, mafia (М), don (ДМ).
 - Winner is `town` or `mafia`; every seat on the winning team gets a win.
-- 6–16 seats per game, with a variable role pack. The seat count is chosen on New game ("Players") and can be changed in the editor.
+- 7–16 players per game (`SEATS_MIN`/`SEATS_MAX` in data.js and worker.js), with a variable role pack. The seat count is chosen on New game ("Players") and can be changed in the editor.
 - Date inputs show DD/MM/YYYY (text field + 📅 native picker); the stored format is ISO.
 - A round = **Night N first** (mafia shot, don check, sheriff check, maniac shot, doctor heal), **then Day N** (nominations: who → whom + votes received, then voted out / removed for fouls).
 - A doctor heal cancels a shot on the same seat.

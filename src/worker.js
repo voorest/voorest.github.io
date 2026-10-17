@@ -377,13 +377,14 @@ async function updateAccount(env, id, body, admin) {
 }
 
 /* ---------------- admin: games ---------------- */
+const SEATS_MIN = 7, SEATS_MAX = 16; // players per game (the page offers the same range)
 async function createGame(env, body) {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(body.date || '') ? body.date : null;
   if (!date) throw new HttpError(400, 'Date is required (YYYY-MM-DD)');
   const settings = await loadSettings(env);
   // The editor sends the whole game on its first save; older callers send only a seat count.
   const full = Array.isArray(body.seats);
-  const seats = int(full ? body.seats.length : body.seats ?? settings.defaultSeats ?? 10, 4, 20);
+  const seats = int(full ? body.seats.length : body.seats ?? settings.defaultSeats ?? 10, SEATS_MIN, SEATS_MAX);
   const next = await env.DB.prepare('SELECT COALESCE(MAX(number), 0) + 1 AS n FROM games WHERE date = ?').bind(date).first();
   const g = await env.DB.prepare("INSERT INTO games (date, number, source) VALUES (?, ?, 'app') RETURNING id").bind(date, next.n).first();
   if (full) {
@@ -409,8 +410,9 @@ async function saveGame(env, id, body) {
   if (clash) throw new HttpError(409, `There is already a game #${number} on ${date}`);
   const winner = body.winner === 'town' || body.winner === 'mafia' ? body.winner : null;
 
-  const seats = (Array.isArray(body.seats) ? body.seats : []).slice(0, 20).map(s => [
-    gid, int(s.seat, 1, 20), s.playerId ? int(s.playerId, 1, 1e9) : null,
+  if (!Array.isArray(body.seats) || body.seats.length < SEATS_MIN || body.seats.length > SEATS_MAX) throw new HttpError(400, `A game has ${SEATS_MIN}–${SEATS_MAX} players`);
+  const seats = body.seats.map(s => [
+    gid, int(s.seat, 1, SEATS_MAX), s.playerId ? int(s.playerId, 1, 1e9) : null,
     ROLES.includes(s.role) ? s.role : null,
     s.alive === 0 || s.alive === 1 ? s.alive : null,
     int(s.fouls ?? 0, 0, 9) ?? 0,
@@ -458,7 +460,7 @@ async function deleteGame(env, id) {
 }
 
 async function saveSettings(env, body) {
-  const allowed = { priorWeight: [0, 50], minGames: [1, 50], defaultSeats: [4, 20] };
+  const allowed = { priorWeight: [0, 50], minGames: [1, 50], defaultSeats: [SEATS_MIN, SEATS_MAX] };
   const stmts = [];
   for (const [k, [min, max]] of Object.entries(allowed)) {
     if (k in body) stmts.push(env.DB.prepare("INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at").bind(k, String(int(body[k], min, max))));

@@ -389,7 +389,7 @@ function viewGames() {
       <h1>Games <span class="muted">· ${games.length}</span></h1>
       ${Store.canEdit() ? `<div class="row gap wrap">
         ${dateField(localToday(), 'id="newDate" aria-label="Game date"')}
-        <label class="field inline"><span>Players</span><select id="newSeats">${Array.from({ length: 11 }, (_, k) => k + 6).map(n => `<option ${n === (+Store.get().settings.defaultSeats || 10) ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+        <label class="field inline"><span>Players</span><select id="newSeats">${seatOptions().map(n => `<option ${n === (+Store.get().settings.defaultSeats || 10) ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
         <button class="btn primary" id="newGame">+ New game</button>
       </div>` : ''}
     </div>
@@ -543,7 +543,7 @@ function viewGame(id) {
       <div class="section-head">
         <h2>Seats & roles</h2>
         ${ro ? '' : `<div class="row gap wrap">
-          <label class="field inline"><span>Players</span><select data-act="seat-count">${Array.from({ length: 11 }, (_, k) => k + 6).map(n => `<option ${n === g.seats.length ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+          <label class="field inline"><span>Players</span><select data-act="seat-count">${seatOptions().map(n => `<option ${n === g.seats.length ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
           <button class="btn small" data-act="random-roles">🎲 Random roles</button>
           <button class="btn small ghost" data-act="clear-roles">Clear roles</button>
         </div>`}
@@ -1112,7 +1112,7 @@ function viewSettings() {
         <form id="settings" class="settings">
           <label class="field"><span>Confidence weight K — how many “average games” every player starts with</span><input type="number" min="0" max="50" name="priorWeight" value="${s.priorWeight}" ${dis}></label>
           <label class="field"><span>Minimum games for “King of the Game”</span><input type="number" min="1" max="50" name="minGames" value="${s.minGames}" ${dis}></label>
-          <label class="field"><span>Seats in a new game</span><input type="number" min="6" max="16" name="defaultSeats" value="${s.defaultSeats}" ${dis}></label>
+          <label class="field"><span>Seats in a new game</span><input type="number" min="${SEATS_MIN}" max="${SEATS_MAX}" name="defaultSeats" value="${s.defaultSeats}" ${dis}></label>
           ${edit ? '<div><button class="btn primary" type="submit">Save settings</button></div>' : '<p class="muted small">Only the admin can change these.</p>'}
         </form>
       </section>
@@ -1133,7 +1133,7 @@ function viewSettings() {
     const patch = {
       priorWeight: Math.max(0, Math.min(50, +f.priorWeight.value || 0)),
       minGames: Math.max(1, Math.min(50, +f.minGames.value || 3)),
-      defaultSeats: Math.min(16, Math.max(6, +f.defaultSeats.value || 10)),
+      defaultSeats: Math.min(SEATS_MAX, Math.max(SEATS_MIN, +f.defaultSeats.value || 10)),
     };
     if (!confirm(`Save settings?\n\nK = ${patch.priorWeight}, min games for King = ${patch.minGames}, seats in a new game = ${patch.defaultSeats}`)) return;
     attempt(async () => { await Store.saveSettings(patch); toast('Settings saved'); viewSettings(); });
