@@ -51,7 +51,8 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
 .brand { color: var(--text); font-size: 1.1rem; white-space: nowrap; }
 .brand b { color: var(--accent); }
 .brand:hover { text-decoration: none; }
-.logo { color: var(--town); margin-right: .2rem; }
+.brand { display: inline-flex; align-items: center; gap: .5rem; }
+.logo { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; flex: none; }
 nav { display: flex; gap: .25rem; overflow-x: auto; }
 nav a { color: var(--muted); padding: .4rem .75rem; border-radius: 8px; white-space: nowrap; }
 nav a:hover { color: var(--text); background: var(--surface-2); text-decoration: none; }

@@ -132,7 +132,7 @@ function toast(msg) {
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => t.classList.remove('show'), 2600);
+  toast._t = setTimeout(() => t.classList.remove('show'), Math.max(2600, msg.length * 60));   // longer messages stay longer
 }
 async function attempt(fn) {
   try { return await fn(); } catch (e) { toast('⚠ ' + e.message); return undefined; }

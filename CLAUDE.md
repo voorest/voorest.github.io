@@ -21,7 +21,7 @@ Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (do
 - The site, code and comments are in English. **Telegram bot messages are in Ukrainian.**
 
 ## Local development
-`npm run seed:local` (copies the newest `data/mafia-bcn-backup-*.json` into the local D1), then `npm run dev`. On localhost with `DEV_LOGIN=true` in `.dev.vars` there is a "Dev login (local admin)" button. It is disabled in production (needs both the var and the localhost hostname).
+`npm run seed:local` (copies the newest `data/mafia-bcn-backup-*.json` into the local D1; without a backup it reloads `data/import.sql`; both empty the tables first, so it can be run again), then `npm run dev`. On localhost with `DEV_LOGIN=true` in `.dev.vars` there is a "Dev login (local admin)" button. It is disabled in production (needs both the var and the localhost hostname).
 
 ## Game rules as modelled
 - Roles: citizen (МИР), sheriff (Ш), doctor (ЛІК), **maniac (МАН) = citizens' team**, mafia (М), don (ДМ).
@@ -40,7 +40,7 @@ Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (do
 - Game days are Sundays; history imported from `Mafia_stats_v2.xlsx` (14 games, 1 Mar to 3 May 2026). The sheet had day/month swaps, which are fixed.
 
 ## People & privacy
-- `players` names: **nickname** (public, e.g. "Tianaboa") and **name** (player name, e.g. "Tania"), both set by the admin only. The dashboard shows only nicks; inside pages (game, player, pickers) show "name nick" (`fullName` in data.js, `displayName` in bot.js; just the nick if there's no name or the nick already contains it). **First and last names** are private: the admin, or the player on their own page ("My details", `PATCH /api/me/profile`).
+- `players` names: **nickname** (public, e.g. "Tianaboa") and **name** (player name, e.g. "Tania"), both set by the admin only. Nicks are written in Latin letters and are **unique** (ignoring case): a taken nick is refused with "already taken, choose another". Couples get ♂/♀ after a shared family nick ("Orsini ♀"). Names are in Ukrainian. The dashboard shows only nicks; inside pages (game, player, pickers) show "name nick" (`fullName` in data.js, `displayName` in bot.js; just the nick if there's no name or the nick already contains it). **First and last names** are private: the admin, or the player on their own page ("My details", `PATCH /api/me/profile`).
 - **Photos** (`avatar_v`, `avatar_src`): stored in KV `avatar:<player id>` (≤150 KB, 320×320, WebP/JPEG/PNG), served by `GET /api/avatar/<No.>?v=<version>` **only to logged-in people**; everyone else sees the hat icon. The Telegram profile photo is taken on first login/Start (if none was set or removed); a player can upload (crop dialog) / take from Telegram / remove their own; the admin can do it for anyone, plus "📷 Load Telegram photos" in bulk (Players page). Player **No.** = `players.number` (join order): a new player gets max+1, so deleting the newest frees its number; deleting an older one leaves a gap and nobody is renumbered.
 - `accounts`: Telegram logins linked to a player. role `player` (default) or `admin`. Admin is granted only in the DB/admin UI, never by sign-up. On the Players page every link/role change asks for confirmation (Cancel restores the old value); your own role is shown as "admin · you" and can't be changed there (the server refuses it too).
 - Linking: the admin enters a player's Telegram @username, and the player is linked on first login. The admin can also link a login by hand.
@@ -111,4 +111,4 @@ Sessions are stored in D1 as SHA-256 hashes; the cookie is HttpOnly.
   - **Monthly summary** (personal): games, best role, change vs last month.
 - Dropped: pair stats ("with whom you win"), sign-up polls (not planned for now). Postponed: Telegram Mini App (the website with its cached data check is enough).
 - Settings that are still open: rating formula details, which titles to keep.
-- Logo images (owner-made) are kept privately in `data/` (tg-logo-full.jpg, tg-logo-bot-full.jpg).
+- Logo images (owner-made) are kept privately in `data/` (tg-logo-full.jpg, tg-logo-bot-full.jpg). The site header uses `public/images/logo.png` (180×180), shown round left of "Mafia BCN".

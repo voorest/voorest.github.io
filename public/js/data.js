@@ -222,8 +222,7 @@ const Store = (() => {
     const o = typeof input === 'string' ? { name: input } : (input || {});
     const name = String(o.name || '').trim(), nickname = String(o.nickname || '').trim() || name;
     if (!nickname) return null;
-    const existing = db.players.find(p => p.nickname.toLowerCase() === nickname.toLowerCase() || fullName(p).toLowerCase() === fullName({ name, nickname }).toLowerCase());
-    if (existing) return existing;
+    nickFree(nickname);
     let p;
     if (isLive()) {
       p = await api('/api/admin/players', { method: 'POST', body: { name, nickname } });
@@ -235,9 +234,15 @@ const Store = (() => {
     saveLocal();
     return p;
   }
+  /** Nicks are unique (ignoring case): a taken one is refused with a clear message. */
+  function nickFree(nickname, exceptId) {
+    const other = db.players.find(p => p.id !== String(exceptId) && p.nickname.toLowerCase() === nickname.toLowerCase());
+    if (other) throw new Error(`The nick "${nickname}" is already taken (${fullName(other)}). Please choose another one.`);
+  }
   async function updatePlayer(id, patch) {
     const p = player(id);
     if (!p) return;
+    if (patch.nickname) nickFree(patch.nickname, id);
     if (isLive()) {
       await api('/api/admin/players/' + id, { method: 'PATCH', body: patch });
       await loadAdmin();

@@ -328,7 +328,7 @@ async function createPlayer(env, body) {
   const nickname = str(body.nickname, 60) || name;
   if (!nickname) throw new HttpError(400, 'Name or nick is required');
   const existing = await env.DB.prepare('SELECT id FROM players WHERE nickname = ? COLLATE NOCASE').bind(nickname).first();
-  if (existing) throw new HttpError(409, 'This nick already exists');
+  if (existing) throw new HttpError(409, `The nick "${nickname}" is already taken. Please choose another one.`);
   // Next free number after the highest one: deleting the newest player frees its number again
   const p = await env.DB.prepare(
     'INSERT INTO players (name, nickname, number) VALUES (?, ?, (SELECT COALESCE(MAX(COALESCE(number, id)), 0) + 1 FROM players)) RETURNING id, number, name, nickname, created_at',
@@ -346,7 +346,7 @@ async function updatePlayer(env, id, body) {
     const nickname = str(body.nickname, 60);
     if (!nickname) throw new HttpError(400, 'Nick is required');
     const clash = await env.DB.prepare('SELECT id FROM players WHERE nickname = ? COLLATE NOCASE AND id != ?').bind(nickname, pid).first();
-    if (clash) throw new HttpError(409, 'Another player already has this nick');
+    if (clash) throw new HttpError(409, `The nick "${nickname}" is already taken. Please choose another one.`);
     stmts.push(env.DB.prepare("UPDATE players SET nickname = ?, updated_at = datetime('now') WHERE id = ?").bind(nickname, pid));
   }
   for (const f of ['first_name', 'last_name', 'notes']) {
