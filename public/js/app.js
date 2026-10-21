@@ -316,8 +316,7 @@ const LB_COLS = [
   { key: 'aboveExpected', label: '± exp.', get: p => p.aboveExpected, title: 'Wins compared with an average player who got the same roles. +2 = two wins more than usual for those roles, −1 = one fewer.' },
   { key: 'days', label: 'Days', get: p => p.days },
   ...ROLE_ORDER.map(r => ({ key: r, label: ROLES[r].label, get: p => p.roleRating[r] + p.byRole[r].g / 1e4 })),
-  { key: 'survived', label: 'Alive', get: p => p.survived, title: 'Games alive at the end' },
-  { key: 'nomAcc', label: 'Nom. acc.', get: p => p.nomAcc ?? -1, title: 'As a citizen: share of nominations against mafia' },
+  { key: 'survived', label: 'Alive', get: p => (p.games ? p.survived / p.games : 0) + p.survived / 1e4, title: 'Games alive at the end / games played' },
 ];
 
 function viewDashboard() {
@@ -401,8 +400,7 @@ function viewDashboard() {
                 <td class="${p.aboveExpected >= 0 ? 'pos' : 'neg'}">${signed(p.aboveExpected)}</td>
                 <td>${p.days}</td>
                 ${ROLE_ORDER.map(r => `<td class="rolecell">${p.byRole[r].g ? `${p.byRole[r].w}/${p.byRole[r].g}` : '<span class="muted">–</span>'}</td>`).join('')}
-                <td>${p.survived}</td>
-                <td>${pct(p.nomAcc)}</td>
+                <td>${p.survived}/${p.games}</td>
               </tr>`).join('')}
           </tbody>
         </table>
