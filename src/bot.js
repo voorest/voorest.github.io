@@ -23,6 +23,15 @@ export class BotError extends Error {
   constructor(status, message) { super(message); this.httpStatus = status; }
 }
 
+/** How a player is called inside the site and in Telegram: "Tania Tianaboa" (name + nick).
+    Just the nick when there is no name, or when the nick already contains the name ("Ledy Lara"). */
+export function displayName(p) {
+  const n = String((p && p.name) || '').trim(), k = String((p && p.nickname) || '').trim();
+  if (!n) return k;
+  if (!k || k.toLowerCase().includes(n.toLowerCase())) return k || n;
+  return `${n} ${k}`;
+}
+
 const escHtml = t => String(t ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
 export async function tg(env, method, payload) {
@@ -33,6 +42,20 @@ export async function tg(env, method, payload) {
     body: JSON.stringify(payload || {}),
   });
   return res.json().catch(() => ({ ok: false, description: `HTTP ${res.status}` }));
+}
+
+/** The person's current Telegram profile photo, about 320×320 (Telegram keeps ready-made sizes). null if none or hidden. */
+export async function telegramPhoto(env, uid) {
+  if (!env.TELEGRAM_BOT_TOKEN || !/^\d+$/.test(String(uid || ''))) return null;
+  const r = await tg(env, 'getUserProfilePhotos', { user_id: Number(uid), limit: 1 });
+  if (!r.ok || !r.result.total_count || !r.result.photos[0]) return null;
+  const sizes = [...r.result.photos[0]].sort((a, b) => a.width - b.width);
+  const pick = sizes.find(x => x.width >= 320) || sizes[sizes.length - 1];
+  const f = await tg(env, 'getFile', { file_id: pick.file_id });
+  if (!f.ok) return null;
+  const res = await fetch(`https://api.telegram.org/file/bot${env.TELEGRAM_BOT_TOKEN}/${f.result.file_path}`);
+  if (!res.ok) return null;
+  return { bytes: new Uint8Array(await res.arrayBuffer()), type: 'image/jpeg' };
 }
 
 /** Secret that Telegram sends back with every webhook call (derived from the bot token: nothing extra to configure). */
@@ -124,13 +147,14 @@ async function onMessage(env, msg, deps) {
   if (acc.match !== 'known' && deps.loginNotice) {
     await deps.loginNotice({ match: acc.match, accountId: acc.id, name: acc.name, username: acc.username }).catch(() => {});
   }
+  if (acc.match !== 'known' && deps.autoAvatar) await deps.autoAvatar(acc.id).catch(() => {});
   if (isPrivate && cmd !== '/stop') await saveChat(env, chat, 'active');
   if (!['/start', '/help', '/mystats'].includes(cmd)) return;
-  const linked = acc && acc.player_id ? await env.DB.prepare('SELECT nickname FROM players WHERE id = ?').bind(acc.player_id).first() : null;
+  const linked = acc && acc.player_id ? await env.DB.prepare('SELECT nickname, name FROM players WHERE id = ?').bind(acc.player_id).first() : null;
   return reply(commandReply(cmd, {
     firstName: msg.from.first_name, isPrivate,
     playerId: acc && acc.player_id ? String(acc.player_id) : null,
-    nickname: linked ? linked.nickname : null,
+    nickname: linked ? displayName(linked) : null,
     site: env.SITE_URL || deps.origin,
     data: cmd === '/mystats' && acc && acc.player_id ? await deps.publicData() : null,
   }));
@@ -185,7 +209,7 @@ export function playerStatsText(data, pid, site) {
   const ranked = Object.entries(per).sort((a, b) => rating(b[1]) - rating(a[1]));
   const me = per[pid];
   const player = (data.players || []).find(p => p.id === pid) || {};
-  const name = escHtml(player.nickname || 'гравець');
+  const name = escHtml(displayName(player) || 'гравець');
   if (!me) return `📊 <b>${name}</b>\nЩе немає завершених ігор.\n${site}/player/${player.number || pid}`;
   const pct = x => Math.round(x * 100) + '%';
   const roles = Object.entries(me.roles).sort((a, b) => b[1].g - a[1].g).map(([r, v]) => `${ROLE_LABEL[r] || r} ${v.w}/${v.g}`).join(' · ');
@@ -226,13 +250,13 @@ export async function botStatus(env, origin) {
 
 /** Everyone who ever pressed Start (loaded on demand by the "Who receives messages" tab). */
 export async function botChats(env) {
-  const { results } = await env.DB.prepare(`SELECT c.chat_id, c.type, c.title, c.username, c.status, c.started_at, c.updated_at, p.nickname, a.role
+  const { results } = await env.DB.prepare(`SELECT c.chat_id, c.type, c.title, c.username, c.status, c.started_at, c.updated_at, p.nickname, p.name, a.role
                       FROM bot_chats c
                       LEFT JOIN accounts a ON a.provider = 'telegram' AND a.provider_uid = c.chat_id
                       LEFT JOIN players p ON p.id = a.player_id
                      WHERE c.type = 'private'
                      ORDER BY c.status = 'active' DESC, c.updated_at DESC`).all();
-  return { chats: results };
+  return { chats: results.map(c => ({ ...c, nickname: c.nickname ? displayName(c) : null })) };
 }
 
 /** Sent posts, newest first (loaded on demand by the "History" tab). */
@@ -257,8 +281,8 @@ export async function botPreview(env, body, deps) {
   const player = body.playerId ? (data.players || []).find(p => p.id === String(body.playerId)) : null;
   return {
     html: commandReply(cmd, {
-      firstName: player ? player.nickname : 'Олександр', isPrivate: true,
-      playerId: player ? player.id : null, nickname: player ? player.nickname : null,
+      firstName: player ? (player.name || player.nickname) : 'Олександр', isPrivate: true,
+      playerId: player ? player.id : null, nickname: player ? displayName(player) : null,
       site: env.SITE_URL || deps.origin, data,
     }),
   };

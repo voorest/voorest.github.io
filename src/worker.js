@@ -12,8 +12,8 @@
  *   POST /api/auth/logout
  * Admin only:
  *   GET    /api/admin/players          players with private fields + linked accounts
- *   POST   /api/admin/players          { nickname }
- *   PATCH  /api/admin/players/:id      { nickname, first_name, last_name, telegram }
+ *   POST   /api/admin/players          { name, nickname }
+ *   PATCH  /api/admin/players/:id      { name, nickname, first_name, last_name, telegram }
  *   DELETE /api/admin/players/:id
  *   PATCH  /api/admin/accounts/:id     { player_id, role }
  *   POST   /api/admin/games            { date }
@@ -43,7 +43,7 @@
  *   TELEGRAM_BOT_TOKEN                           from @BotFather (bot messages, later)
  */
 
-import { BotError, handleWebhook, botStatus, botChats, botPosts, botPreview, botSetup, createPost, processPost, editPost, deletePost } from './bot.js';
+import { BotError, displayName, telegramPhoto, handleWebhook, botStatus, botChats, botPosts, botPreview, botSetup, createPost, processPost, editPost, deletePost } from './bot.js';
 
 const ROLES = ['citizen', 'sheriff', 'doctor', 'maniac', 'mafia', 'don'];
 const NIGHT_KINDS = { mafiaKill: 'mafia_kill', donCheck: 'don_check', sheriffCheck: 'sheriff_check', maniacKill: 'maniac_kill', doctorHeal: 'doctor_heal' };
@@ -111,7 +111,7 @@ async function loadSettings(env) {
 
 async function getData(env) {
   const [players, games, seats, noms, events, settings] = await env.DB.batch([
-    env.DB.prepare("SELECT id, COALESCE(number, id) AS number, nickname, created_at FROM players WHERE status != 'hidden' ORDER BY id"),
+    env.DB.prepare("SELECT id, COALESCE(number, id) AS number, name, nickname, avatar_v, created_at FROM players WHERE status != 'hidden' ORDER BY id"),
     env.DB.prepare('SELECT id, date, number, winner, notes, source FROM games ORDER BY date, number'),
     env.DB.prepare('SELECT game_id, seat, player_id, role, alive, fouls FROM game_seats ORDER BY game_id, seat'),
     env.DB.prepare('SELECT game_id, round, by_seat, target_seat, votes FROM nominations ORDER BY game_id, round, position'),
@@ -153,7 +153,8 @@ async function getData(env) {
     schema: 2,
     generatedAt: new Date().toISOString(),
     settings: s,
-    players: players.results.map(p => ({ id: String(p.id), number: p.number, nickname: p.nickname, createdAt: p.created_at })),
+    // name + nick are public; real first/last names never leave the admin API. av = avatar version (photos are for logged-in users only)
+    players: players.results.map(p => ({ id: String(p.id), number: p.number, name: p.name || '', nickname: p.nickname, av: p.avatar_v || 0, createdAt: p.created_at })),
     games: [...byGame.values()],
   };
 }
@@ -163,7 +164,7 @@ async function currentUser(request, env) {
   const token = getCookie(request, SESSION_COOKIE);
   if (!token) return null;
   const row = await env.DB.prepare(
-    `SELECT a.id, a.player_id, a.username, a.display_name, a.role, a.status, p.nickname
+    `SELECT a.id, a.player_id, a.provider_uid, a.username, a.display_name, a.role, a.status, p.nickname, p.name, p.first_name, p.last_name
        FROM sessions s JOIN accounts a ON a.id = s.account_id LEFT JOIN players p ON p.id = a.player_id
       WHERE s.token_hash = ? AND s.expires_at > datetime('now')`
   ).bind(await sha256(token)).first();
@@ -282,7 +283,10 @@ async function authCallback(request, env) {
       .bind(uid, username, name).first();
     match = 'new';
   }
-  if (match !== 'known') await loginNotice(env, { match, accountId: account.id, name, username, via: 'site' }).catch(() => {});
+  if (match !== 'known') {
+    await loginNotice(env, { match, accountId: account.id, name, username, via: 'site' }).catch(() => {});
+    await autoAvatar(env, account.id).catch(() => {});
+  }
 
   const token = randomToken(32);
   await env.DB.batch([
@@ -306,7 +310,7 @@ async function logout(request, env) {
 /* ---------------- admin: players & accounts ---------------- */
 async function adminPlayers(env) {
   const [players, accounts] = await env.DB.batch([
-    env.DB.prepare('SELECT id, COALESCE(number, id) AS number, nickname, first_name, last_name, status, notes, created_at FROM players ORDER BY id'),
+    env.DB.prepare('SELECT id, COALESCE(number, id) AS number, name, nickname, first_name, last_name, status, notes, avatar_v, avatar_src, created_at FROM players ORDER BY id'),
     env.DB.prepare(`SELECT a.id, a.player_id, a.provider, a.provider_uid, a.username, a.display_name, a.role, a.status, a.last_login_at,
                            EXISTS (SELECT 1 FROM bot_chats c WHERE c.chat_id = a.provider_uid) AS bot
                       FROM accounts a ORDER BY a.id`),
@@ -319,15 +323,17 @@ async function adminPlayers(env) {
 }
 
 async function createPlayer(env, body) {
-  const nickname = str(body.nickname, 60);
-  if (!nickname) throw new HttpError(400, 'Nickname is required');
+  // A quick add may give only a name: the nick then starts as the name and can be changed later
+  const name = str(body.name, 40);
+  const nickname = str(body.nickname, 60) || name;
+  if (!nickname) throw new HttpError(400, 'Name or nick is required');
   const existing = await env.DB.prepare('SELECT id FROM players WHERE nickname = ? COLLATE NOCASE').bind(nickname).first();
-  if (existing) throw new HttpError(409, 'This nickname already exists');
+  if (existing) throw new HttpError(409, 'This nick already exists');
   // Next free number after the highest one: deleting the newest player frees its number again
   const p = await env.DB.prepare(
-    'INSERT INTO players (nickname, number) VALUES (?, (SELECT COALESCE(MAX(COALESCE(number, id)), 0) + 1 FROM players)) RETURNING id, number, nickname, created_at',
-  ).bind(nickname).first();
-  return { id: String(p.id), number: p.number, nickname: p.nickname, createdAt: p.created_at };
+    'INSERT INTO players (name, nickname, number) VALUES (?, ?, (SELECT COALESCE(MAX(COALESCE(number, id)), 0) + 1 FROM players)) RETURNING id, number, name, nickname, created_at',
+  ).bind(name, nickname).first();
+  return { id: String(p.id), number: p.number, name: p.name || '', nickname: p.nickname, av: 0, createdAt: p.created_at };
 }
 
 async function updatePlayer(env, id, body) {
@@ -335,11 +341,12 @@ async function updatePlayer(env, id, body) {
   const cur = await env.DB.prepare('SELECT id FROM players WHERE id = ?').bind(pid).first();
   if (!cur) throw new HttpError(404, 'Player not found');
   const stmts = [];
+  if ('name' in body) stmts.push(env.DB.prepare("UPDATE players SET name = ?, updated_at = datetime('now') WHERE id = ?").bind(str(body.name, 40), pid));
   if ('nickname' in body) {
     const nickname = str(body.nickname, 60);
-    if (!nickname) throw new HttpError(400, 'Nickname is required');
+    if (!nickname) throw new HttpError(400, 'Nick is required');
     const clash = await env.DB.prepare('SELECT id FROM players WHERE nickname = ? COLLATE NOCASE AND id != ?').bind(nickname, pid).first();
-    if (clash) throw new HttpError(409, 'Another player already has this nickname');
+    if (clash) throw new HttpError(409, 'Another player already has this nick');
     stmts.push(env.DB.prepare("UPDATE players SET nickname = ?, updated_at = datetime('now') WHERE id = ?").bind(nickname, pid));
   }
   for (const f of ['first_name', 'last_name', 'notes']) {
@@ -383,6 +390,8 @@ async function updateAccount(env, id, body, admin) {
     stmts.push(env.DB.prepare('UPDATE accounts SET role = ? WHERE id = ?').bind(body.role, aid));
   }
   if (stmts.length) await env.DB.batch(stmts);
+  // linked to a player by hand: take their Telegram photo if they have none yet
+  if (body.player_id) await autoAvatar(env, aid).catch(() => {});
   return { ok: true };
 }
 
@@ -493,6 +502,84 @@ async function backup(env) {
 // "is version X still current?".
 const SNAPSHOT_KEY = 'public:data';
 
+/* ---------------- avatars ----------------
+   One square image per player (about 320×320, ≤150 KB) in KV under avatar:<player id>.
+   Only logged-in people can load them; everyone else sees the hat icon drawn by the page. */
+const AVATAR_TYPES = ['image/webp', 'image/jpeg', 'image/png'];
+const AVATAR_MAX = 150 * 1024;
+function decodeImage(body) {
+  const m = /^data:(image\/[a-z]+);base64,([A-Za-z0-9+/=]+)$/.exec(String(body && body.image || ''));
+  if (!m) throw new HttpError(400, 'Send the picture as a data URL');
+  const bin = atob(m[2]);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return { bytes, type: m[1] };
+}
+async function saveAvatar(env, pid, { bytes, type }, src, rebuild = true) {
+  if (!AVATAR_TYPES.includes(type)) throw new HttpError(400, 'Use a JPEG, PNG or WebP picture');
+  if (bytes.byteLength > AVATAR_MAX) throw new HttpError(413, 'The picture is too big (max 150 KB)');
+  await env.KV.put(`avatar:${pid}`, bytes, { metadata: { type } });
+  const v = Date.now();   // milliseconds: a new picture always gets a new address, so browsers never show a cached old one
+  await env.DB.prepare("UPDATE players SET avatar_v = ?, avatar_src = ?, updated_at = datetime('now') WHERE id = ?").bind(v, src, pid).run();
+  if (rebuild) await rebuildSnapshot(env);
+  return { av: v };
+}
+async function removeAvatar(env, pid) {
+  await env.KV.delete(`avatar:${pid}`);
+  await env.DB.prepare("UPDATE players SET avatar_v = NULL, avatar_src = 'removed', updated_at = datetime('now') WHERE id = ?").bind(pid).run();
+  await rebuildSnapshot(env);
+  return { av: 0 };
+}
+/** Take the photo from Telegram. Returns the new version, or null if the person has no (visible) photo. */
+async function avatarFromTelegram(env, pid, uid, rebuild = true) {
+  const photo = await telegramPhoto(env, uid);
+  if (!photo) {
+    await env.DB.prepare("UPDATE players SET avatar_src = 'none' WHERE id = ? AND avatar_v IS NULL").bind(pid).run();
+    return null;
+  }
+  return saveAvatar(env, pid, photo, 'telegram', rebuild);
+}
+/** First contact of a linked player: take the Telegram photo once, unless they already have one or removed it. */
+async function autoAvatar(env, accountId) {
+  const r = await env.DB.prepare(`SELECT a.provider_uid, p.id AS pid FROM accounts a JOIN players p ON p.id = a.player_id
+                                   WHERE a.id = ? AND p.avatar_v IS NULL AND p.avatar_src IS NULL`).bind(accountId).first();
+  if (r && r.provider_uid && r.provider_uid !== 'dev-admin') await avatarFromTelegram(env, r.pid, r.provider_uid);
+}
+async function serveAvatar(request, env, number) {
+  if (!await currentUser(request, env)) return new Response('Log in to see photos', { status: 403 });
+  const p = await env.DB.prepare('SELECT id FROM players WHERE COALESCE(number, id) = ?').bind(int(number, 1, 1e9)).first();
+  const img = p ? await env.KV.getWithMetadata(`avatar:${p.id}`, 'arrayBuffer') : null;
+  if (!img || !img.value) return new Response('No photo', { status: 404 });
+  // the address carries the version (?v=…), so the browser may keep it for good
+  return new Response(img.value, { headers: { 'content-type': (img.metadata && img.metadata.type) || 'image/jpeg', 'cache-control': 'private, max-age=31536000, immutable' } });
+}
+/** Admin: take Telegram photos for linked players who have none yet (a few per call; the page repeats). */
+async function bulkTelegramAvatars(env) {
+  const { results } = await env.DB.prepare(`SELECT p.id AS pid, MIN(a.provider_uid) AS uid FROM players p JOIN accounts a ON a.player_id = p.id
+                                             WHERE p.avatar_v IS NULL AND p.avatar_src IS NULL AND a.provider_uid IS NOT NULL AND a.provider_uid != 'dev-admin'
+                                             GROUP BY p.id LIMIT 12`).all();
+  let added = 0;
+  for (const r of results) { if (await avatarFromTelegram(env, r.pid, r.uid, false).catch(() => null)) added++; else await env.DB.prepare("UPDATE players SET avatar_src = 'none' WHERE id = ? AND avatar_v IS NULL").bind(r.pid).run(); }
+  if (added) await rebuildSnapshot(env);
+  const left = await env.DB.prepare(`SELECT count(DISTINCT p.id) AS n FROM players p JOIN accounts a ON a.player_id = p.id
+                                      WHERE p.avatar_v IS NULL AND p.avatar_src IS NULL AND a.provider_uid IS NOT NULL AND a.provider_uid != 'dev-admin'`).first();
+  return { checked: results.length, added, remaining: left.n };
+}
+/** Avatar actions for one player: upload a picture, remove it, or take it from Telegram. */
+async function avatarAction(request, env, pid, method, tail) {
+  if (method === 'POST' && tail === 'telegram') {
+    const a = await env.DB.prepare("SELECT provider_uid FROM accounts WHERE player_id = ? AND provider_uid IS NOT NULL AND provider_uid != 'dev-admin' LIMIT 1").bind(pid).first();
+    if (!a) throw new HttpError(400, 'This player has no linked Telegram account');
+    await env.DB.prepare('UPDATE players SET avatar_src = NULL WHERE id = ? AND avatar_v IS NULL').bind(pid).run();
+    const r = await avatarFromTelegram(env, pid, a.provider_uid);
+    if (!r) throw new HttpError(404, 'No Telegram photo found (none, or hidden by privacy settings)');
+    return r;
+  }
+  if (method === 'POST' && !tail) return saveAvatar(env, pid, decodeImage(await readBody(request)), 'upload');
+  if (method === 'DELETE' && !tail) return removeAvatar(env, pid);
+  throw new HttpError(405, 'Method not allowed');
+}
+
 async function rebuildSnapshot(env) {
   const data = await getData(env);
   const version = new Date().toISOString();
@@ -538,7 +625,12 @@ function meFor(u, env, url) {
   return {
     devLogin: devLoginAllowed(env, url),
     loginAvailable: telegramConfigured(env),
-    user: u && { accountId: u.id, username: u.username, name: u.display_name, role: u.role, playerId: u.player_id == null ? null : String(u.player_id), nickname: u.nickname },
+    user: u && {
+      accountId: u.id, username: u.username, name: u.display_name, role: u.role,
+      playerId: u.player_id == null ? null : String(u.player_id), nickname: u.player_id == null ? null : displayName(u),
+      // your own private details, so you can see and edit them on your page
+      firstName: u.first_name || '', lastName: u.last_name || '',
+    },
   };
 }
 
@@ -600,8 +692,8 @@ async function loginNotice(env, { match, accountId, name, username, via }) {
   const where = via === 'bot' ? 'натиснув(ла) Start у боті' : 'увійшов(ла) на сайт';
   const site = env.SITE_URL || '';
   if (match === 'prefill' || match === 'firstid') {
-    const p = await env.DB.prepare('SELECT p.nickname FROM accounts a JOIN players p ON p.id = a.player_id WHERE a.id = ?').bind(accountId).first();
-    if (p || match === 'prefill') return notifyAdmins(env, `✅ ${who} ${where} і автоматично прив'язаний(а) до гравця <b>${esc(p ? p.nickname : '?')}</b> (${match === 'prefill' ? 'за @username' : 'за Telegram ID'}).`);
+    const p = await env.DB.prepare('SELECT p.nickname, p.name FROM accounts a JOIN players p ON p.id = a.player_id WHERE a.id = ?').bind(accountId).first();
+    if (p || match === 'prefill') return notifyAdmins(env, `✅ ${who} ${where} і автоматично прив'язаний(а) до гравця <b>${esc(p ? displayName(p) : '?')}</b> (${match === 'prefill' ? 'за @username' : 'за Telegram ID'}).`);
   }
   return notifyAdmins(env, `🆕 ${who} ${where} вперше.\nЩе не прив'язаний(а) до гравця — прив'яжіть на сторінці Players → Telegram logins:\n${site}/players`);
 }
@@ -673,10 +765,35 @@ async function api(request, env, url) {
     return handleWebhook(request, env, {
       origin: url.origin,
       loginNotice: info => loginNotice(env, { ...info, via: 'bot' }),
+      autoAvatar: accountId => autoAvatar(env, accountId),
       publicData: async () => JSON.parse((await publicSnapshot(env)).body),
     });
   }
   if (path === '/api/me' && method === 'GET') return json(meFor(await currentUser(request, env), env, url));
+  const av = path.match(/^\/api\/avatar\/(\d+)$/);
+  if (av && method === 'GET') return serveAvatar(request, env, av[1]);
+  // A logged-in player edits their own private details and photo (nick and name stay with the admin)
+  if (path === '/api/me/profile' || path.startsWith('/api/me/avatar')) {
+    checkOrigin(request);
+    const u = await currentUser(request, env);
+    if (!u) throw new HttpError(401, 'Please log in');
+    if (!u.player_id) throw new HttpError(403, 'Your Telegram is not linked to a player yet');
+    if (path === '/api/me/profile' && method === 'PATCH') {
+      const body = await readBody(request);
+      const stmts = ['first_name', 'last_name'].filter(f => f in body)
+        .map(f => env.DB.prepare(`UPDATE players SET ${f} = ?, updated_at = datetime('now') WHERE id = ?`).bind(str(body[f], 100), u.player_id));
+      if (stmts.length) await env.DB.batch(stmts);
+      return json({ ok: true });
+    }
+    const tail = path === '/api/me/avatar' ? '' : path.replace('/api/me/avatar/', '');
+    if (tail === 'telegram' && method === 'POST') {
+      await env.DB.prepare('UPDATE players SET avatar_src = NULL WHERE id = ? AND avatar_v IS NULL').bind(u.player_id).run();
+      const r = await avatarFromTelegram(env, u.player_id, u.provider_uid);
+      if (!r) throw new HttpError(404, 'No Telegram photo found (none, or hidden by privacy settings)');
+      return json(r);
+    }
+    return json(await avatarAction(request, env, u.player_id, method, tail));
+  }
   if (path === '/api/auth/dev-login' && method === 'GET') return devLogin(env, url);
   if (path === '/api/auth/telegram/start' && method === 'GET') {
     if (env.RL) {
@@ -711,6 +828,9 @@ async function api(request, env, url) {
     if (pm && method === 'POST' && pm[2]) return json(await processPost(env, +pm[1]));
     if (pm && method === 'PUT' && !pm[2]) return json(await editPost(env, +pm[1], await readBody(request)));
     if (pm && method === 'DELETE' && !pm[2]) return json(await deletePost(env, +pm[1]));
+    const pa = path.match(/^\/api\/admin\/players\/(\d+)\/avatar(?:\/(telegram))?$/);
+    if (pa) return json(await avatarAction(request, env, int(pa[1], 1, 1e9), method, pa[2] || ''));
+    if (path === '/api/admin/avatars/telegram' && method === 'POST') return json(await bulkTelegramAvatars(env));
     const m = path.match(/^\/api\/admin\/(players|accounts|games|settings|backup)(?:\/(\d+))?$/);
     if (!m) throw new HttpError(404, 'Not found');
     const [, resource, id] = m;

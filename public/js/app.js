@@ -61,6 +61,72 @@ const playerHref = pOrId => {
   const p = typeof pOrId === 'object' && pOrId ? pOrId : Store.player(pOrId);
   return `/player/${p && p.number ? p.number : pOrId}`;
 };
+/* Avatars: real photos only for logged-in people (served by /api/avatar), the hat icon for everyone else. */
+const HAT_SVG = '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M13 58c2-12 9-18 19-18s17 6 19 18" fill="currentColor" opacity=".5"/><circle cx="32" cy="32" r="9.5" fill="currentColor" opacity=".5"/><path d="M14 25.5c5 1.6 31 1.6 36 0-1 2.4-3.5 3.6-6 3.6H20c-2.5 0-5-1.2-6-3.6z" fill="currentColor"/><path d="M21.5 25.5l2.2-10.2C24.5 12 26.7 11 32 11s7.5 1 8.3 4.3l2.2 10.2z" fill="currentColor"/><path d="M22.6 21h18.8l.6 3H22z" fill="var(--accent)"/></svg>';
+function avatar(p, size = 28) {
+  const pl = p && typeof p === 'object' ? p : Store.player(p);
+  if (Store.isLive() && Store.user() && pl && pl.av) {
+    return `<img class="ava" src="/api/avatar/${pl.number}?v=${pl.av}" width="${size}" height="${size}" alt="" loading="lazy" onerror="this.outerHTML=HAT_HTML(${size})">`;
+  }
+  return HAT_HTML(size);
+}
+function HAT_HTML(size) { return `<span class="ava ava-hat" style="width:${size}px;height:${size}px">${HAT_SVG}</span>`; }
+
+/** Pick a picture, let the person move/zoom a square crop, return a ~320×320 data URL (WebP, or JPEG). */
+function pickAndCropPhoto() {
+  return new Promise(resolve => {
+    const input = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*' });
+    input.onchange = () => {
+      const file = input.files[0];
+      if (!file) return resolve(null);
+      const img = new Image();
+      img.onload = () => {
+        const V = 280, OUT = 320;                       // view size on screen, saved size
+        const dlg = document.createElement('div');
+        dlg.className = 'modal';
+        dlg.innerHTML = `<div class="modal-box"><h3>Crop the photo</h3>
+          <canvas width="${V}" height="${V}" class="crop"></canvas>
+          <label class="field"><span>Zoom</span><input type="range" min="1" max="4" step="0.01" value="1"></label>
+          <p class="muted small">Drag the picture to move it.</p>
+          <div class="row gap"><span class="spacer"></span><button class="btn ghost" data-x="cancel">Cancel</button><button class="btn primary" data-x="save">Save photo</button></div></div>`;
+        document.body.appendChild(dlg);
+        const cv = dlg.querySelector('canvas'), ctx = cv.getContext('2d'), zoom = dlg.querySelector('input');
+        const base = V / Math.min(img.width, img.height);   // "cover" scale at zoom 1
+        let z = 1, x = 0, y = 0;                             // offset of the picture centre from the view centre
+        const clamp = () => {
+          const w = img.width * base * z, hgt = img.height * base * z;
+          x = Math.max(-(w - V) / 2, Math.min((w - V) / 2, x));
+          y = Math.max(-(hgt - V) / 2, Math.min((hgt - V) / 2, y));
+        };
+        const draw = (c, size) => {
+          const k = size / V, w = img.width * base * z * k, hgt = img.height * base * z * k;
+          c.clearRect(0, 0, size, size);
+          c.drawImage(img, (size - w) / 2 + x * k, (size - hgt) / 2 + y * k, w, hgt);
+        };
+        const redraw = () => { clamp(); draw(ctx, V); };
+        redraw();
+        zoom.oninput = () => { z = +zoom.value; redraw(); };
+        let drag = null;
+        cv.onpointerdown = e => { drag = { sx: e.clientX, sy: e.clientY, x, y }; cv.setPointerCapture(e.pointerId); };
+        cv.onpointermove = e => { if (!drag) return; x = drag.x + e.clientX - drag.sx; y = drag.y + e.clientY - drag.sy; redraw(); };
+        cv.onpointerup = () => { drag = null; };
+        const close = val => { dlg.remove(); URL.revokeObjectURL(img.src); resolve(val); };
+        dlg.querySelector('[data-x="cancel"]').onclick = () => close(null);
+        dlg.querySelector('[data-x="save"]').onclick = () => {
+          const out = Object.assign(document.createElement('canvas'), { width: OUT, height: OUT });
+          draw(out.getContext('2d'), OUT);
+          let url = out.toDataURL('image/webp', 0.85);
+          if (!url.startsWith('data:image/webp')) url = out.toDataURL('image/jpeg', 0.85);
+          close(url);
+        };
+      };
+      img.onerror = () => { toast('Could not open this picture'); resolve(null); };
+      img.src = URL.createObjectURL(file);
+    };
+    input.click();
+  });
+}
+
 function toast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -233,7 +299,7 @@ window.addEventListener('beforeunload', e => { if (gameDirty()) { e.preventDefau
    DASHBOARD
    ============================================================ */
 const LB_COLS = [
-  { key: 'name', label: 'Player', get: p => p.name.toLowerCase() },
+  { key: 'name', label: 'Player', get: p => p.nick.toLowerCase() },
   { key: 'games', label: 'Games', get: p => p.games },
   { key: 'wins', label: 'Wins', get: p => p.wins },
   { key: 'winRate', label: 'Win %', get: p => p.winRate },
@@ -302,7 +368,7 @@ function viewDashboard() {
           <div class="title-body">
             <div class="title-name">${h(t.title)}</div>
             ${t.player
-              ? `<a class="title-holder" href="${playerHref(t.player)}">${h(t.player.name)}</a><div class="title-detail">${h(t.detail)}</div>`
+              ? `<a class="title-holder" href="${playerHref(t.player)}">${h(t.player.nick)}</a><div class="title-detail">${h(t.detail)}</div>`
               : `<div class="title-detail">Nobody yet (${h(t.rule)})</div>`}
             <div class="title-desc">${h(t.desc)}</div>
           </div>
@@ -318,7 +384,7 @@ function viewDashboard() {
             ${sorted.map((p, i) => `
               <tr>
                 <td class="muted">${i + 1}</td>
-                <td><a href="${playerHref(p)}">${h(p.name)}</a></td>
+                <td class="who-cell"><a href="${playerHref(p)}">${avatar(p, 24)}<span>${h(p.nick)}</span></a></td>
                 <td>${p.games}</td>
                 <td>${p.wins}</td>
                 <td>${pct(p.winRate)}</td>
@@ -347,7 +413,7 @@ function viewDashboard() {
             return `<div class="role-block">
               <h4>${roleChip(r)} <span class="muted small" title="Average win rate of this role · games where this role was in play">avg ${pct(st.baseline[r])} · ${st.roleGames[r]} games</span></h4>
               ${list.length ? list.map(p => `
-                <div class="bar-row"><a href="${playerHref(p)}">${h(p.name)}</a>${bar(p.roleRating[r], 1, 'role-' + r)}<span class="num">${pct(p.roleRating[r])} <span class="muted">${p.byRole[r].w}/${p.byRole[r].g}</span></span></div>`).join('')
+                <div class="bar-row"><a href="${playerHref(p)}">${h(p.nick)}</a>${bar(p.roleRating[r], 1, 'role-' + r)}<span class="num">${pct(p.roleRating[r])} <span class="muted">${p.byRole[r].w}/${p.byRole[r].g}</span></span></div>`).join('')
                 : '<p class="muted small">No games yet.</p>'}
             </div>`;
           }).join('')}
@@ -358,7 +424,7 @@ function viewDashboard() {
         <h2>Attendance</h2>
         <p class="muted small">Games played (and number of game days).</p>
         ${[...st.players].sort((a, b) => b.games - a.games || b.days - a.days).slice(0, 30).map(p => `
-          <div class="bar-row"><a href="${playerHref(p)}">${h(p.name)}</a>${bar(p.games, maxGames, 'accent')}<span class="num">${p.games} <span class="muted">· ${p.days}d</span></span></div>`).join('')}
+          <div class="bar-row"><a href="${playerHref(p)}">${h(p.nick)}</a>${bar(p.games, maxGames, 'accent')}<span class="num">${p.games} <span class="muted">· ${p.days}d</span></span></div>`).join('')}
       </section>
     </div>
 
@@ -460,7 +526,7 @@ function viewGame(id) {
   const lbl = n => `${n}. ${name(n)}`;
   const seatOpts = (list, selected, emptyLabel) =>
     `<option value="">${emptyLabel}</option>` + list.map(n => `<option value="${n}" ${+selected === n ? 'selected' : ''}>${h(lbl(n))}</option>`).join('');
-  const players = [...db.players].sort((a, b) => a.nickname.localeCompare(b.nickname));
+  const players = [...db.players].sort((a, b) => fullName(a).localeCompare(fullName(b)));
   const used = {};
   g.seats.forEach(s => { if (s.playerId) used[s.playerId] = (used[s.playerId] || 0) + 1; });
   const counts = GameLogic.roleCounts(g);
@@ -474,9 +540,9 @@ function viewGame(id) {
     const f = alive ? null : tl.fates[s.seat];
     return `<tr class="${alive ? '' : 'dead'}">
       <td class="seatno">${s.seat}</td>
-      <td>${ro ? (s.playerId ? `<a href="${playerHref(s.playerId)}">${h(name(s.seat))}</a>` : '—') : `<select data-act="seat-player" data-seat="${s.seat}" class="${s.playerId && used[s.playerId] > 1 ? 'bad' : ''}">
+      <td>${ro ? (s.playerId ? `<a class="who-cell" href="${playerHref(s.playerId)}">${avatar(s.playerId, 24)}<span>${h(name(s.seat))}</span></a>` : '—') : `<select data-act="seat-player" data-seat="${s.seat}" class="${s.playerId && used[s.playerId] > 1 ? 'bad' : ''}">
         <option value="">— pick player —</option>
-        ${players.map(p => `<option value="${p.id}" ${p.id === s.playerId ? 'selected' : ''}>${h(p.nickname)}${used[p.id] && p.id !== s.playerId ? ' (seated)' : ''}</option>`).join('')}
+        ${players.map(p => `<option value="${p.id}" ${p.id === s.playerId ? 'selected' : ''}>${h(fullName(p))}${used[p.id] && p.id !== s.playerId ? ' (seated)' : ''}</option>`).join('')}
       </select>`}</td>
       <td>${ro ? roleChip(s.role) : `<select data-act="seat-role" data-seat="${s.seat}" class="role-select ${s.role ? 'role-' + s.role : ''}">
         <option value="">—</option>
@@ -583,7 +649,7 @@ function viewGame(id) {
         </div>`}
       </div>
       ${ro ? '' : `<div class="row gap quick-add">
-        <input id="qaName" placeholder="New player nickname → goes to the first empty seat">
+        <input id="qaName" placeholder="New player's name → goes to the first empty seat (nick can be added later)">
         <button class="btn small" data-act="quick-add">+ Add player</button>
       </div>`}
       <div class="role-count">${ROLE_ORDER.filter(r => counts[r]).map(r => `<span class="chip role-${r}">${ROLES[r].label} × ${counts[r]}</span>`).join('')}</div>
@@ -677,10 +743,10 @@ function viewGame(id) {
       case 'quick-add': {
         const inp = $('#qaName');
         const p = await attempt(() => Store.addPlayer(inp.value));
-        if (!p) { if (!inp.value.trim()) toast('Type a nickname first'); return; }
+        if (!p) { if (!inp.value.trim()) toast('Type a name first'); return; }
         const free = g.seats.find(x => !x.playerId);
-        if (free && !g.seats.some(x => x.playerId === p.id)) { free.playerId = p.id; toast(`${p.nickname} (No. ${p.number}) → seat ${free.seat}`); }
-        else toast(`${p.nickname} added`);
+        if (free && !g.seats.some(x => x.playerId === p.id)) { free.playerId = p.id; toast(`${fullName(p)} (No. ${p.number}) → seat ${free.seat}`); }
+        else toast(`${fullName(p)} added`);
         break;
       }
       case 'winner': g.winner = el.dataset.val || null; break; // stored with Save changes, like everything else
@@ -818,7 +884,7 @@ function viewPlayers() {
   const numCol = { key: 'number', label: 'No.', get: p => p.number };
   const cols = [
     ...(edit ? [numCol] : []),
-    { key: 'nickname', label: 'Nickname', get: p => p.nickname.toLowerCase() },
+    { key: 'nickname', label: 'Player', get: p => fullName(p).toLowerCase() },
     { key: 'games', label: 'Games', get: p => (byId[p.id] || {}).games || 0 },
     { key: 'wins', label: 'Wins', get: p => (byId[p.id] || {}).wins || 0 },
     { key: 'rating', label: 'Rating', get: p => (byId[p.id] || {}).rating || 0 },
@@ -836,7 +902,8 @@ function viewPlayers() {
       const pre = tg.find(a => !a.linked) || tg[0];
       return `<tr class="editing"><td class="muted">${p.number}</td><td colspan="${adminLive ? 8 : 6}">
         <form class="edit-player row gap wrap" data-id="${p.id}">
-          <label class="field"><span>Nickname (public)</span><input name="nickname" value="${h(p.nickname)}" required></label>
+          <label class="field"><span>Name (short, e.g. Tania)</span><input name="name" value="${h(p.name || '')}" maxlength="40"></label>
+          <label class="field"><span>Nick (public, unique)</span><input name="nickname" value="${h(p.nickname)}" required maxlength="60"></label>
           ${adminLive ? `
           <label class="field"><span>First name (private)</span><input name="first_name" value="${h(pv.first_name || '')}"></label>
           <label class="field"><span>Last name (private)</span><input name="last_name" value="${h(pv.last_name || '')}"></label>
@@ -844,9 +911,9 @@ function viewPlayers() {
           <div class="row gap"><button class="btn primary small">Save</button><button type="button" class="btn ghost small" data-cancel>Cancel</button></div>
         </form></td></tr>`;
     }
-    return `<tr data-name="${h((p.nickname + ' ' + (pv.first_name || '') + ' ' + (pv.last_name || '') + ' ' + tg.map(a => a.username).join(' ')).toLowerCase())}">
+    return `<tr data-name="${h((fullName(p) + ' ' + (pv.first_name || '') + ' ' + (pv.last_name || '') + ' ' + tg.map(a => a.username).join(' ')).toLowerCase())}">
       ${edit ? `<td class="muted">${p.number}</td>` : ''}
-      <td><a href="${playerHref(p)}">${h(p.nickname)}</a></td>
+      <td class="who-cell"><a href="${playerHref(p)}">${avatar(p, 24)}<span>${h(fullName(p))}</span></a></td>
       ${adminLive ? `<td>${h([pv.first_name, pv.last_name].filter(Boolean).join(' ')) || '<span class="muted">—</span>'}</td>
         <td>${tg.length ? tg.map(a => {
           const label = a.username ? '@' + a.username : (a.display_name || 'Telegram');
@@ -869,7 +936,8 @@ function viewPlayers() {
     <div class="page-head"><h1>Players <span class="muted">· ${list.length}</span></h1></div>
     ${edit ? `<section class="card">
       <form id="addForm" class="row gap wrap">
-        <input name="nickname" placeholder="Nickname" required>
+        <input name="name" placeholder="Name (e.g. Tania)" maxlength="40">
+        <input name="nickname" placeholder="Nick (e.g. Tianaboa)" maxlength="60">
         <button class="btn primary">+ Add player</button>
         <span class="muted small">New players get the next number (No. ${Math.max(0, ...db.players.map(p => p.number)) + 1}).</span>
       </form>
@@ -880,7 +948,7 @@ function viewPlayers() {
         <table class="players">
           <thead><tr>
             ${cols.slice(0, 2).map(c => `<th data-sort="${c.key}" class="sortable ${c.key === key ? 'sorted' : ''}">${c.label}${c.key === key ? (dir < 0 ? ' ↓' : ' ↑') : ''}</th>`).join('')}
-            ${adminLive ? '<th>Name</th><th>Telegram</th>' : ''}
+            ${adminLive ? '<th>Real name</th><th>Telegram</th>' : ''}
             ${cols.slice(2).map(c => `<th data-sort="${c.key}" class="sortable ${c.key === key ? 'sorted' : ''}">${c.label}${c.key === key ? (dir < 0 ? ' ↓' : ' ↑') : ''}</th>`).join('')}
             ${edit ? '<th></th>' : ''}
           </tr></thead>
@@ -891,14 +959,15 @@ function viewPlayers() {
     </section>
     ${adminLive ? `
     <section class="card">
-      <h2>Telegram logins</h2>
+      <div class="section-head"><h2>Telegram logins</h2>
+        <button class="btn small ghost" id="tgPhotos" title="Take profile photos from Telegram for linked players who have none yet">📷 Load Telegram photos</button></div>
       <p class="muted small">Everyone who has logged in. Link an account to a player so they see "My stats"; make someone admin if they should help with data.</p>
       <div class="table-wrap"><table>
         <thead><tr><th>Telegram</th><th>Last login</th><th>Player</th><th>Role</th></tr></thead>
         <tbody>${loggedIn.map(a => `<tr>
           <td>${h(a.display_name || '')} ${a.username ? `<span class="muted">@${h(a.username)}</span>` : ''}</td>
           <td class="muted">${a.last_login_at ? h(a.last_login_at.slice(0, 16)) : '—'}</td>
-          <td><select data-acc-player="${a.id}"><option value="">— not linked —</option>${[...db.players].sort((x, y) => x.nickname.localeCompare(y.nickname)).map(p => `<option value="${p.id}" ${a.player_id === p.id ? 'selected' : ''}>${h(p.nickname)}</option>`).join('')}</select></td>
+          <td><select data-acc-player="${a.id}"><option value="">— not linked —</option>${[...db.players].sort((x, y) => fullName(x).localeCompare(fullName(y))).map(p => `<option value="${p.id}" ${a.player_id === p.id ? 'selected' : ''}>${h(fullName(p))}</option>`).join('')}</select></td>
           <td>${String(a.id) === String((Store.user() || {}).accountId)
             ? '<span class="chip admin" title="Your own admin role can\'t be removed here (protection against locking yourself out)">admin · you</span>'
             : `<select data-acc-role="${a.id}"><option value="player" ${a.role === 'player' ? 'selected' : ''}>player</option><option value="admin" ${a.role === 'admin' ? 'selected' : ''}>admin</option></select>`}</td>
@@ -920,23 +989,39 @@ function viewPlayers() {
   $('#addForm').onsubmit = e => {
     e.preventDefault();
     attempt(async () => {
-      const p = await Store.addPlayer(e.target.nickname.value);
-      if (p) { toast(`${p.nickname} added as No. ${p.number}`); viewPlayers(); $('#addForm input').focus(); }
+      const f = e.target;
+      if (!f.elements.name.value.trim() && !f.nickname.value.trim()) { toast('Type a name or a nick'); return; }
+      const p = await Store.addPlayer({ name: f.elements.name.value, nickname: f.nickname.value });
+      if (p) { toast(`${fullName(p)} added as No. ${p.number}`); viewPlayers(); $('#addForm input').focus(); }
     });
   };
   $$('[data-edit]').forEach(b => b.onclick = () => { UI.editingPlayer = b.dataset.edit; viewPlayers(); });
   $$('[data-cancel]').forEach(b => b.onclick = () => { UI.editingPlayer = null; viewPlayers(); });
   $$('form.edit-player').forEach(f => f.onsubmit = e => {
     e.preventDefault();
-    const patch = { nickname: f.nickname.value.trim() };
+    const patch = { name: f.elements.name.value.trim(), nickname: f.nickname.value.trim() };
     if (f.first_name) Object.assign(patch, { first_name: f.first_name.value, last_name: f.last_name.value, telegram: f.telegram.value });
     attempt(async () => { await Store.updatePlayer(f.dataset.id, patch); UI.editingPlayer = null; toast('Saved'); viewPlayers(); });
   });
   $$('[data-del]').forEach(b => b.onclick = () => {
     const p = Store.player(b.dataset.del);
-    if (Store.playerInUse(p.id)) { toast(`${p.nickname} has played games — edit instead`); return; }
-    if (confirm(`Delete ${p.nickname}?`)) attempt(async () => { await Store.deletePlayer(p.id); viewPlayers(); });
+    if (Store.playerInUse(p.id)) { toast(`${fullName(p)} has played games — edit instead`); return; }
+    if (confirm(`Delete ${fullName(p)}?`)) attempt(async () => { await Store.deletePlayer(p.id); viewPlayers(); });
   });
+  if ($('#tgPhotos')) $('#tgPhotos').onclick = () => attempt(async () => {
+    $('#tgPhotos').disabled = true;
+    let r = { remaining: 1 }, added = 0, checked = 0, guard = 0;
+    while (r.remaining > 0 && guard++ < 20) {
+      r = await Store.avatar.bulkTelegram();
+      added += r.added; checked += r.checked;
+      if (!r.checked) break;
+      toast(`Photos: ${added} added, ${r.remaining} left…`);
+    }
+    await Store.loadAdmin().catch(() => {});
+    await Store.init().catch(() => {});
+    toast(checked ? `Done: ${added} photo(s) added from Telegram${checked - added ? `, ${checked - added} without a visible photo` : ''}` : 'Everyone linked already has a photo (or was checked before)');
+    viewPlayers();
+  }).finally(() => { if ($('#tgPhotos')) $('#tgPhotos').disabled = false; });
   // Changes to logins apply at once, so each one asks first; Cancel puts the old value back.
   const accName = id => { const a = accounts.find(x => String(x.id) === String(id)) || {}; return a.username ? '@' + a.username : (a.display_name || 'this login'); };
   $$('[data-acc-player]').forEach(s => s.onchange = () => {
@@ -963,12 +1048,57 @@ function viewPlayer(id) {
   const rank = ranked.findIndex(x => x.id === p0.id) + 1;
   const mine = Store.user() && Store.user().playerId === p0.id;
 
+  const canPhoto = Store.isLive() && (mine || Store.isAdmin());   // your own photo, or any photo for the admin
+  const u = Store.user();
   const head = `
     <div class="page-head">
-      <div><a href="/players" class="back">← Players</a><h1>${h(p0.nickname)}${mine ? ' <span class="chip win">you</span>' : ''}</h1></div>
-    </div>`;
+      <div class="player-head">
+        <div class="player-photo">${avatar(p0, 96)}</div>
+        <div><a href="/players" class="back">← Players</a><h1>${h(fullName(p0))}${mine ? ' <span class="chip win">you</span>' : ''}</h1>
+          ${canPhoto ? `<div class="row gap wrap photo-actions">
+            <button class="btn small" data-photo="upload">📷 ${p0.av ? 'Change photo' : 'Add photo'}</button>
+            <button class="btn small ghost" data-photo="telegram" title="Take the current profile photo from Telegram">From Telegram</button>
+            ${p0.av ? '<button class="btn small ghost danger-text" data-photo="remove">Remove</button>' : ''}
+          </div>` : ''}
+        </div>
+      </div>
+    </div>
+    ${mine ? `<section class="card my-details">
+      <h2>My details <span class="muted small">· private, only you and the game master see them</span></h2>
+      <form id="myDetails" class="row gap wrap">
+        <label class="field"><span>First name</span><input name="first_name" value="${h(u.firstName || '')}" maxlength="100"></label>
+        <label class="field"><span>Last name</span><input name="last_name" value="${h(u.lastName || '')}" maxlength="100"></label>
+        <div class="field"><span>&nbsp;</span><button class="btn primary" type="submit">Save</button></div>
+      </form>
+      <p class="muted small">Your name and nick on the site are set by the game master.</p>
+    </section>` : ''}`;
+  const wireHead = () => {
+    $$('[data-photo]').forEach(b => b.onclick = () => attempt(async () => {
+      const act = b.dataset.photo, self = !!mine;   // your own photo goes through /api/me, others through the admin API
+      if (act === 'upload') {
+        const url = await pickAndCropPhoto();
+        if (!url) return;
+        await Store.avatar.upload(p0.id, url, self);
+        toast('Photo saved');
+      } else if (act === 'telegram') {
+        await Store.avatar.telegram(p0.id, self);
+        toast('Photo taken from Telegram');
+      } else if (act === 'remove') {
+        if (!confirm('Remove this photo? The hat icon will be shown instead.')) return;
+        await Store.avatar.remove(p0.id, self);
+        toast('Photo removed');
+      }
+      viewPlayer(id);
+    }));
+    if ($('#myDetails')) $('#myDetails').onsubmit = e => attempt(async () => {
+      e.preventDefault();
+      const f = e.target;
+      await Store.profile.save({ first_name: f.first_name.value.trim(), last_name: f.last_name.value.trim() });
+      toast('Saved');
+    });
+  };
 
-  if (!p) { $app.innerHTML = head + `<div class="empty">No finished games yet for ${h(p0.nickname)}.</div>`; return; }
+  if (!p) { $app.innerHTML = head + `<div class="empty">No finished games yet for ${h(fullName(p0))}.</div>`; wireHead(); return; }
 
   const facts = [
     ['Alive at the end', `${p.survived} (${pct(p.survived / p.games)})`],
@@ -1029,6 +1159,7 @@ function viewPlayer(id) {
       </div>
     </section>
   `;
+  wireHead();
 }
 
 /* ============================================================
@@ -1045,7 +1176,7 @@ function toCSV(db, sep) {
       const f = alive ? null : tl.fates[s.seat];
       const team = s.role ? ROLES[s.role].team : '';
       const p = Store.player(s.playerId) || {};
-      rows.push([g.date, g.number, g.id, s.seat, p.number || '', p.nickname || '', s.role || '', team, g.winner || '',
+      rows.push([g.date, g.number, g.id, s.seat, p.number || '', fullName(p) || '', s.role || '', team, g.winner || '',
         g.winner && team ? (team === g.winner ? 1 : 0) : '', alive ? 1 : 0, f ? f.type : '', f && f.round ? f.round : '', s.fouls || 0].map(esc).join(sep));
     });
   });
@@ -1310,7 +1441,7 @@ async function viewBot({ refresh = false } = {}) {
   const connected = st.webhook && st.webhook.url === st.expectedUrl;
   const draft = UI.botDraft || {};
   const db = Store.get();
-  const players = [...db.players].sort((a, b) => a.nickname.localeCompare(b.nickname));
+  const players = [...db.players].sort((a, b) => fullName(a).localeCompare(fullName(b)));
   const days = [...new Set(db.games.filter(g => g.winner).map(g => g.date))].sort().reverse();
 
   $app.innerHTML = `
@@ -1339,7 +1470,7 @@ async function viewBot({ refresh = false } = {}) {
         <label class="field"><span>As player</span>
           <select id="cmdPlayer">
             <option value="">Someone not linked yet</option>
-            ${players.map(p => `<option value="${p.id}" ${p.id === UI.botCmdPlayer ? 'selected' : ''}>${h(p.nickname)} (No. ${p.number})</option>`).join('')}
+            ${players.map(p => `<option value="${p.id}" ${p.id === UI.botCmdPlayer ? 'selected' : ''}>${h(fullName(p))} (No. ${p.number})</option>`).join('')}
           </select>
         </label>
         <div class="tg-preview" id="cmdPreview"></div>

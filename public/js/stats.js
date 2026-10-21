@@ -20,7 +20,7 @@ const Stats = {
     const P = {};
     const blankRoles = () => Object.fromEntries(ROLE_ORDER.map(r => [r, { g: 0, w: 0 }]));
     const ensure = id => (P[id] ||= {
-      id, name: Store.playerName(id), number: (Store.player(id) || {}).number || 0, games: 0, wins: 0, dates: new Set(), byRole: blankRoles(),
+      id, name: Store.playerName(id), nick: Store.playerNick(id), av: (Store.player(id) || {}).av || 0, number: (Store.player(id) || {}).number || 0, games: 0, wins: 0, dates: new Set(), byRole: blankRoles(),
       survived: 0, voted: 0, removed: 0, killed: 0, maniac: 0, died: 0, firstKilled: 0, fouls: 0,
       noms: 0, nomsOnMafia: 0, nomsAsTown: 0,
       sheriffChecks: 0, sheriffBlack: 0, donChecks: 0, donFoundSheriff: 0,

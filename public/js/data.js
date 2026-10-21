@@ -31,6 +31,15 @@ function pct(x) {
   return x == null || isNaN(x) ? '—' : Math.round(x * 100) + '%';
 }
 
+/** How a player is called inside the site: "Tania Tianaboa" (name + nick). Just the nick when there is
+    no name or the nick already contains it ("Ledy Lara"). Public rankings show the nick only. */
+function fullName(p) {
+  const n = String((p && p.name) || '').trim(), k = String((p && p.nickname) || '').trim();
+  if (!n) return k;
+  if (!k || k.toLowerCase().includes(n.toLowerCase())) return k || n;
+  return `${n} ${k}`;
+}
+
 /** Players per game: 7 to 16 (the server checks the same limits). */
 const SEATS_MIN = 7, SEATS_MAX = 16;
 const seatOptions = () => Array.from({ length: SEATS_MAX - SEATS_MIN + 1 }, (_, k) => k + SEATS_MIN);
@@ -86,7 +95,7 @@ const Store = (() => {
     const out = {
       ...base, ...d,
       settings: { ...base.settings, ...(d.settings || {}) },
-      players: (Array.isArray(d.players) ? d.players : []).map((p, i) => ({ ...p, id: String(p.id), number: p.number || i + 1, nickname: p.nickname || p.name || '?' })),
+      players: (Array.isArray(d.players) ? d.players : []).map((p, i) => ({ ...p, id: String(p.id), number: p.number || i + 1, name: p.name || '', nickname: p.nickname || p.name || '?', av: p.av || 0 })),
       games: (Array.isArray(d.games) ? d.games : []).map(g => ({
         notes: '', source: 'app', ...g,
         id: String(g.id),
@@ -208,17 +217,19 @@ const Store = (() => {
   function clear() { db = empty(); saveLocal(); }
 
   /* ---------- players ---------- */
-  async function addPlayer(nickname) {
-    nickname = String(nickname || '').trim();
+  /** Add a player: a string is taken as the name (quick add), or { name, nickname }. */
+  async function addPlayer(input) {
+    const o = typeof input === 'string' ? { name: input } : (input || {});
+    const name = String(o.name || '').trim(), nickname = String(o.nickname || '').trim() || name;
     if (!nickname) return null;
-    const existing = db.players.find(p => p.nickname.toLowerCase() === nickname.toLowerCase());
+    const existing = db.players.find(p => p.nickname.toLowerCase() === nickname.toLowerCase() || fullName(p).toLowerCase() === fullName({ name, nickname }).toLowerCase());
     if (existing) return existing;
     let p;
     if (isLive()) {
-      p = await api('/api/admin/players', { method: 'POST', body: { nickname } });
+      p = await api('/api/admin/players', { method: 'POST', body: { name, nickname } });
       admin.players.push({ ...p, first_name: null, last_name: null });
     } else {
-      p = { id: uid(), number: Math.max(0, ...db.players.map(x => x.number || 0)) + 1, nickname, createdAt: new Date().toISOString() };
+      p = { id: uid(), number: Math.max(0, ...db.players.map(x => x.number || 0)) + 1, name, nickname, av: 0, createdAt: new Date().toISOString() };
     }
     db.players.push(p);
     saveLocal();
@@ -232,6 +243,7 @@ const Store = (() => {
       await loadAdmin();
     }
     if (patch.nickname) p.nickname = patch.nickname;
+    if ('name' in patch) p.name = patch.name || '';
     saveLocal();
   }
   const playerInUse = id => db.games.some(g => g.seats.some(s => s.playerId === String(id)));
@@ -247,7 +259,24 @@ const Store = (() => {
     await loadAdmin();
   }
   const player = id => db.players.find(p => p.id === String(id));
-  const playerName = id => (player(id) || {}).nickname || '(unknown)';
+  const playerName = id => (player(id) ? fullName(player(id)) : '(unknown)');   // "Tania Tianaboa"
+  const playerNick = id => (player(id) || {}).nickname || '(unknown)';           // "Tianaboa" (public rankings)
+
+  /* ---------- your own details and photos ---------- */
+  const setAv = (pid, av) => { const p = player(pid); if (p) { p.av = av || 0; saveLocal(); } };
+  const profile = {
+    save: async patch => {
+      await api('/api/me/profile', { method: 'PATCH', body: patch });
+      if (me.user) Object.assign(me.user, { firstName: patch.first_name ?? me.user.firstName, lastName: patch.last_name ?? me.user.lastName });
+    },
+  };
+  /** Photo actions for a player: your own (self) or anyone's (admin). */
+  const avatar = {
+    upload: async (pid, dataUrl, self) => { const r = await api(self ? '/api/me/avatar' : `/api/admin/players/${pid}/avatar`, { method: 'POST', body: { image: dataUrl } }); setAv(pid, r.av); return r; },
+    remove: async (pid, self) => { const r = await api(self ? '/api/me/avatar' : `/api/admin/players/${pid}/avatar`, { method: 'DELETE' }); setAv(pid, 0); return r; },
+    telegram: async (pid, self) => { const r = await api(self ? '/api/me/avatar/telegram' : `/api/admin/players/${pid}/avatar/telegram`, { method: 'POST', body: {} }); setAv(pid, r.av); return r; },
+    bulkTelegram: () => api('/api/admin/avatars/telegram', { method: 'POST', body: {} }),
+  };
 
   /* ---------- games ---------- */
   /** A new game exists only in the browser until its first "Save changes". */
@@ -332,7 +361,7 @@ const Store = (() => {
   return {
     uid, init, throttleWait, get, isLive, canEdit, isAdmin, user, loginAvailable, devLogin, adminData, loadAdmin,
     onSaveState, replace, clear, saveLocal, logout,
-    addPlayer, updatePlayer, deletePlayer, updateAccount, playerInUse, player, playerName,
+    addPlayer, updatePlayer, deletePlayer, updateAccount, playerInUse, player, playerName, playerNick, profile, avatar,
     draftGame, saveGame, game, gameByDay, playerByNumber, deleteGame, sortedGames, overallNumber, saveSettings,
     listBackups, backupNow, bot,
   };
