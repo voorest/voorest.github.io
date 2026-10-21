@@ -73,7 +73,7 @@ function avatar(p, size = 28) {
 }
 /** Default picture: the man / woman icon when gender is set, otherwise the neutral hat. */
 function ICON_HTML(size, g) {
-  if (g === 'm' || g === 'f') return `<img class="ava" src="/images/ava-${g}.svg" width="${size}" height="${size}" alt="">`;
+  if (g === 'm' || g === 'f') return `<span class="ava ava-icon" style="width:${size}px;height:${size}px"><img src="/images/mafia-${g === 'm' ? 'man' : 'woman'}.svg" alt=""></span>`;
   return `<span class="ava ava-hat" style="width:${size}px;height:${size}px">${HAT_SVG}</span>`;
 }
 const genderSelect = v => `<select name="gender" title="Picks the default icon when there is no photo">

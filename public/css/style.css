@@ -392,4 +392,6 @@ canvas.crop:active { cursor: grabbing; }
   .player-photo .ava { width: 72px !important; height: 72px !important; }
   .my-details form .field input { min-width: 0; width: 100%; }
 }
-img.ava[src^="/images/ava-"] { box-shadow: 0 0 0 1px var(--border); }
+/* Default man / woman icons: black drawing with see-through details on a light disc, the outer margin cropped */
+.ava-icon { overflow: hidden; background: #f1eee8; box-shadow: 0 0 0 1px var(--border); }
+.ava-icon img { display: block; width: 112%; height: 112%; margin: -6%; max-width: none; }
