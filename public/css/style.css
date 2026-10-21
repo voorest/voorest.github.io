@@ -365,3 +365,5 @@ body:has(.savebar) #toast { bottom: 84px; }
 .tab-empty { display: flex; gap: 1rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .tab-empty p { margin: 0; }
 .icon-btn { font-size: 1.15rem; line-height: 1; padding-left: .7rem; padding-right: .7rem; }
+tr.row-link { cursor: pointer; }
+tr.row-link:hover td { background: var(--surface-2); }

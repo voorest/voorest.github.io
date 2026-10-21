@@ -41,6 +41,8 @@ const Stats = {
         if (ROLES[s.role].team === g.winner) roleTotals[s.role].w++;
       }
     }
+    // games in which each role was in play (a game with 3 citizens counts once)
+    const roleGames = Object.fromEntries(ROLE_ORDER.map(r => [r, finished.filter(g => g.seats.some(x => x.playerId && x.role === r)).length]));
     const allSeats = ROLE_ORDER.reduce((a, r) => a + roleTotals[r].g, 0);
     const allWins = ROLE_ORDER.reduce((a, r) => a + roleTotals[r].w, 0);
     const overallRate = allSeats ? allWins / allSeats : 0.5;
@@ -117,7 +119,7 @@ const Stats = {
     });
 
     return {
-      players, baseline, roleTotals, overallRate, K,
+      players, baseline, roleTotals, roleGames, overallRate, K,
       totals: { games: finished.length, inProgress: db.games.length - finished.length, days: dates.size, townWins, mafiaWins, players: players.length },
     };
   },

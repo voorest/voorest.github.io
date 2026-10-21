@@ -191,7 +191,7 @@ export function playerStatsText(data, pid, site) {
   const roles = Object.entries(me.roles).sort((a, b) => b[1].g - a[1].g).map(([r, v]) => `${ROLE_LABEL[r] || r} ${v.w}/${v.g}`).join(' · ');
   const [y, m, d] = me.last.date.split('-').map(Number);
   return [
-    `📊 <b>${name}</b> (№ ${player.number || pid})`,
+    `📊 <b>${name}</b>`,
     `🏅 Місце ${ranked.findIndex(([id]) => id === pid) + 1} з ${ranked.length} · рейтинг ${pct(rating(me))}`,
     `🎲 Ігор ${me.g} · перемог ${me.w} (${pct(me.w / me.g)})`,
     `🎭 ${roles}`,

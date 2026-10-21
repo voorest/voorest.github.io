@@ -205,6 +205,13 @@ function go(path, { replace = false } = {}) {
   route();
   if (!replace) window.scrollTo(0, 0);
 }
+// A table row with data-href opens that page when clicked anywhere (not only on its link)
+document.addEventListener('click', e => {
+  const tr = e.target.closest('tr.row-link');
+  if (!tr || e.target.closest('a, button, input, select, textarea') || e.button !== 0) return;
+  if (e.metaKey || e.ctrlKey) { window.open(tr.dataset.href, '_blank'); return; }
+  go(tr.dataset.href);
+});
 // Internal links (<a href="/...">) are handled here instead of reloading the page
 document.addEventListener('click', e => {
   const a = e.target.closest('a[href^="/"]');
@@ -226,7 +233,6 @@ window.addEventListener('beforeunload', e => { if (gameDirty()) { e.preventDefau
    DASHBOARD
    ============================================================ */
 const LB_COLS = [
-  { key: 'number', label: 'No.', get: p => p.number, title: 'Player number = order in which players joined our stats' },
   { key: 'name', label: 'Player', get: p => p.name.toLowerCase() },
   { key: 'games', label: 'Games', get: p => p.games },
   { key: 'wins', label: 'Wins', get: p => p.wins },
@@ -260,7 +266,7 @@ function viewDashboard() {
 
   const titles = Stats.titles(st, db.settings);
   const { key, dir } = UI.lbSort;
-  const col = LB_COLS.find(c => c.key === key) || LB_COLS[5];
+  const col = LB_COLS.find(c => c.key === key) || LB_COLS.find(c => c.key === 'rating');
   const sorted = [...st.players].sort((a, b) => {
     const va = col.get(a), vb = col.get(b);
     if (va < vb) return -dir;
@@ -312,7 +318,6 @@ function viewDashboard() {
             ${sorted.map((p, i) => `
               <tr>
                 <td class="muted">${i + 1}</td>
-                <td class="muted">${p.number}</td>
                 <td><a href="${playerHref(p)}">${h(p.name)}</a></td>
                 <td>${p.games}</td>
                 <td>${p.wins}</td>
@@ -327,7 +332,7 @@ function viewDashboard() {
           </tbody>
         </table>
       </div>
-      <p class="muted small"><b>No.</b> = player number in order of joining (new players get the next number). <b>Rating</b> = win rate adjusted for number of games: (wins + ${st.K} × ${pct(st.overallRate)}) ÷ (games + ${st.K}), so few games stay close to the average.
+      <p class="muted small"><b>#</b> = place in the current sort. <b>Rating</b> = win rate adjusted for number of games: (wins + ${st.K} × ${pct(st.overallRate)}) ÷ (games + ${st.K}), so few games stay close to the average.
       <b>± exp.</b> = wins compared with an average player who got the same roles. Some roles win more often than others (${ROLE_ORDER.map(r => `${ROLES[r].label} ${pct(st.baseline[r])}`).join(', ')}), so we add up the usual chance for every game a player played: <span class="pos">+2</span> means two wins more than usual, <span class="neg">−1</span> one fewer. Role columns: wins/games. Click a header to sort.</p>
     </section>
 
@@ -340,7 +345,7 @@ function viewDashboard() {
             const list = st.players.filter(p => p.byRole[r].g > 0)
               .sort((a, b) => b.roleRating[r] - a.roleRating[r] || b.byRole[r].g - a.byRole[r].g).slice(0, 5);
             return `<div class="role-block">
-              <h4>${roleChip(r)} <span class="muted small">avg ${pct(st.baseline[r])} · ${st.roleTotals[r].g} games</span></h4>
+              <h4>${roleChip(r)} <span class="muted small" title="Average win rate of this role · games where this role was in play">avg ${pct(st.baseline[r])} · ${st.roleGames[r]} games</span></h4>
               ${list.length ? list.map(p => `
                 <div class="bar-row"><a href="${playerHref(p)}">${h(p.name)}</a>${bar(p.roleRating[r], 1, 'role-' + r)}<span class="num">${pct(p.roleRating[r])} <span class="muted">${p.byRole[r].w}/${p.byRole[r].g}</span></span></div>`).join('')
                 : '<p class="muted small">No games yet.</p>'}
@@ -364,7 +369,13 @@ function viewDashboard() {
   $$('th[data-sort]').forEach(th => th.onclick = () => {
     const k = th.dataset.sort;
     UI.lbSort = { key: k, dir: UI.lbSort.key === k ? -UI.lbSort.dir : (k === 'name' ? 1 : -1) };
+    // re-sorting redraws the page: keep the table's sideways scroll and the page position (phones)
+    const wrap = $('table.lb') && $('table.lb').closest('.table-wrap');
+    const left = wrap ? wrap.scrollLeft : 0, top = window.scrollY;
     viewDashboard();
+    const again = $('table.lb') && $('table.lb').closest('.table-wrap');
+    if (again) again.scrollLeft = left;
+    window.scrollTo(0, top);
   });
 }
 
@@ -803,8 +814,10 @@ function viewPlayers() {
   const accounts = adminLive ? Store.adminData().accounts : [];
   const tgFor = pid => accounts.filter(a => a.player_id === pid && a.provider === 'telegram');
 
+  // The player No. (order of joining) is for the admin only; visitors see the list without it
+  const numCol = { key: 'number', label: 'No.', get: p => p.number };
   const cols = [
-    { key: 'number', label: 'No.', get: p => p.number },
+    ...(edit ? [numCol] : []),
     { key: 'nickname', label: 'Nickname', get: p => p.nickname.toLowerCase() },
     { key: 'games', label: 'Games', get: p => (byId[p.id] || {}).games || 0 },
     { key: 'wins', label: 'Wins', get: p => (byId[p.id] || {}).wins || 0 },
@@ -812,7 +825,7 @@ function viewPlayers() {
     { key: 'last', label: 'Last played', get: p => (byId[p.id] || {}).lastPlayed || '' },
   ];
   const { key, dir } = UI.plSort;
-  const col = cols.find(c => c.key === key) || cols[0];
+  const col = cols.find(c => c.key === key) || numCol;
   const list = [...db.players].sort((a, b) => { const va = col.get(a), vb = col.get(b); return va < vb ? -dir : va > vb ? dir : a.number - b.number; });
 
   const row = p => {
@@ -832,7 +845,7 @@ function viewPlayers() {
         </form></td></tr>`;
     }
     return `<tr data-name="${h((p.nickname + ' ' + (pv.first_name || '') + ' ' + (pv.last_name || '') + ' ' + tg.map(a => a.username).join(' ')).toLowerCase())}">
-      <td class="muted">${p.number}</td>
+      ${edit ? `<td class="muted">${p.number}</td>` : ''}
       <td><a href="${playerHref(p)}">${h(p.nickname)}</a></td>
       ${adminLive ? `<td>${h([pv.first_name, pv.last_name].filter(Boolean).join(' ')) || '<span class="muted">—</span>'}</td>
         <td>${tg.length ? tg.map(a => {
@@ -952,7 +965,7 @@ function viewPlayer(id) {
 
   const head = `
     <div class="page-head">
-      <div><a href="/players" class="back">← Players</a><h1>${h(p0.nickname)} <span class="muted">No. ${p0.number}</span>${mine ? ' <span class="chip win">you</span>' : ''}</h1></div>
+      <div><a href="/players" class="back">← Players</a><h1>${h(p0.nickname)}${mine ? ' <span class="chip win">you</span>' : ''}</h1></div>
     </div>`;
 
   if (!p) { $app.innerHTML = head + `<div class="empty">No finished games yet for ${h(p0.nickname)}.</div>`; return; }
@@ -1000,15 +1013,17 @@ function viewPlayer(id) {
         <table>
           <thead><tr><th>Date</th><th>Game</th><th>Seat</th><th>Role</th><th>Result</th><th>Fate</th></tr></thead>
           <tbody>
-            ${[...p.history].sort((a, b) => b.date.localeCompare(a.date) || b.number - a.number).map(x => `
-              <tr>
+            ${[...p.history].sort((a, b) => b.date.localeCompare(a.date) || b.number - a.number).map(x => {
+              const href = Store.game(x.gameId) ? gameHref(Store.game(x.gameId)) : '/games';
+              return `
+              <tr class="row-link" data-href="${href}">
                 <td>${fmtDate(x.date)}</td>
-                <td><a href="${Store.game(x.gameId) ? gameHref(Store.game(x.gameId)) : '/games'}">#${x.number}</a></td>
+                <td><a href="${href}">#${x.number}</a></td>
                 <td>${x.seat}</td>
                 <td>${roleChip(x.role)}</td>
                 <td>${x.won ? '<span class="chip win">Win</span>' : '<span class="chip loss">Loss</span>'}</td>
                 <td class="muted">${fateText(x.fate)}</td>
-              </tr>`).join('')}
+              </tr>`; }).join('')}
           </tbody>
         </table>
       </div>
