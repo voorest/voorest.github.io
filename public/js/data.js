@@ -95,7 +95,7 @@ const Store = (() => {
     const out = {
       ...base, ...d,
       settings: { ...base.settings, ...(d.settings || {}) },
-      players: (Array.isArray(d.players) ? d.players : []).map((p, i) => ({ ...p, id: String(p.id), number: p.number || i + 1, name: p.name || '', nickname: p.nickname || p.name || '?', av: p.av || 0 })),
+      players: (Array.isArray(d.players) ? d.players : []).map((p, i) => ({ ...p, id: String(p.id), number: p.number || i + 1, name: p.name || '', nickname: p.nickname || p.name || '?', gender: p.gender || null, av: p.av || 0 })),
       games: (Array.isArray(d.games) ? d.games : []).map(g => ({
         notes: '', source: 'app', ...g,
         id: String(g.id),
@@ -217,7 +217,7 @@ const Store = (() => {
   function clear() { db = empty(); saveLocal(); }
 
   /* ---------- players ---------- */
-  /** Add a player: a string is taken as the name (quick add), or { name, nickname }. */
+  /** Add a player: a string is taken as the name (quick add), or { name, nickname, gender }. */
   async function addPlayer(input) {
     const o = typeof input === 'string' ? { name: input } : (input || {});
     const name = String(o.name || '').trim(), nickname = String(o.nickname || '').trim() || name;
@@ -225,10 +225,10 @@ const Store = (() => {
     nickFree(nickname);
     let p;
     if (isLive()) {
-      p = await api('/api/admin/players', { method: 'POST', body: { name, nickname } });
+      p = await api('/api/admin/players', { method: 'POST', body: { name, nickname, gender: o.gender || null } });
       admin.players.push({ ...p, first_name: null, last_name: null });
     } else {
-      p = { id: uid(), number: Math.max(0, ...db.players.map(x => x.number || 0)) + 1, name, nickname, av: 0, createdAt: new Date().toISOString() };
+      p = { id: uid(), number: Math.max(0, ...db.players.map(x => x.number || 0)) + 1, name, nickname, gender: o.gender || null, av: 0, createdAt: new Date().toISOString() };
     }
     db.players.push(p);
     saveLocal();
@@ -248,6 +248,7 @@ const Store = (() => {
       await loadAdmin();
     }
     if (patch.nickname) p.nickname = patch.nickname;
+    if ('gender' in patch) p.gender = patch.gender || null;
     if ('name' in patch) p.name = patch.name || '';
     saveLocal();
   }

@@ -65,12 +65,19 @@ const playerHref = pOrId => {
 const HAT_SVG = '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M13 58c2-12 9-18 19-18s17 6 19 18" fill="currentColor" opacity=".5"/><circle cx="32" cy="32" r="9.5" fill="currentColor" opacity=".5"/><path d="M14 25.5c5 1.6 31 1.6 36 0-1 2.4-3.5 3.6-6 3.6H20c-2.5 0-5-1.2-6-3.6z" fill="currentColor"/><path d="M21.5 25.5l2.2-10.2C24.5 12 26.7 11 32 11s7.5 1 8.3 4.3l2.2 10.2z" fill="currentColor"/><path d="M22.6 21h18.8l.6 3H22z" fill="var(--accent)"/></svg>';
 function avatar(p, size = 28) {
   const pl = p && typeof p === 'object' ? p : Store.player(p);
+  const g = pl ? (Store.player(pl.id) || pl).gender : null;
   if (Store.isLive() && Store.user() && pl && pl.av) {
-    return `<img class="ava" src="/api/avatar/${pl.number}?v=${pl.av}" width="${size}" height="${size}" alt="" loading="lazy" onerror="this.outerHTML=HAT_HTML(${size})">`;
+    return `<img class="ava" src="/api/avatar/${pl.number}?v=${pl.av}" width="${size}" height="${size}" alt="" loading="lazy" onerror="this.outerHTML=ICON_HTML(${size},'${g || ''}')">`;
   }
-  return HAT_HTML(size);
+  return ICON_HTML(size, g);
 }
-function HAT_HTML(size) { return `<span class="ava ava-hat" style="width:${size}px;height:${size}px">${HAT_SVG}</span>`; }
+/** Default picture: the man / woman icon when gender is set, otherwise the neutral hat. */
+function ICON_HTML(size, g) {
+  if (g === 'm' || g === 'f') return `<img class="ava" src="/images/ava-${g}.svg" width="${size}" height="${size}" alt="">`;
+  return `<span class="ava ava-hat" style="width:${size}px;height:${size}px">${HAT_SVG}</span>`;
+}
+const genderSelect = v => `<select name="gender" title="Picks the default icon when there is no photo">
+  <option value="">— gender —</option><option value="m"${v === 'm' ? ' selected' : ''}>Man</option><option value="f"${v === 'f' ? ' selected' : ''}>Woman</option></select>`;
 
 /** Pick a picture, let the person move/zoom a square crop, return a ~320×320 data URL (WebP, or JPEG). */
 function pickAndCropPhoto() {
@@ -904,6 +911,7 @@ function viewPlayers() {
         <form class="edit-player row gap wrap" data-id="${p.id}">
           <label class="field"><span>Name (short, e.g. Tania)</span><input name="name" value="${h(p.name || '')}" maxlength="40"></label>
           <label class="field"><span>Nick (public, unique)</span><input name="nickname" value="${h(p.nickname)}" required maxlength="60"></label>
+          <label class="field"><span>Gender (icon)</span>${genderSelect(p.gender)}</label>
           ${adminLive ? `
           <label class="field"><span>First name (private)</span><input name="first_name" value="${h(pv.first_name || '')}"></label>
           <label class="field"><span>Last name (private)</span><input name="last_name" value="${h(pv.last_name || '')}"></label>
@@ -938,6 +946,7 @@ function viewPlayers() {
       <form id="addForm" class="row gap wrap">
         <input name="name" placeholder="Name (e.g. Tania)" maxlength="40">
         <input name="nickname" placeholder="Nick (e.g. Tianaboa)" maxlength="60">
+        ${genderSelect(null)}
         <button class="btn primary">+ Add player</button>
         <span class="muted small">New players get the next number (No. ${Math.max(0, ...db.players.map(p => p.number)) + 1}).</span>
       </form>
@@ -991,7 +1000,7 @@ function viewPlayers() {
     attempt(async () => {
       const f = e.target;
       if (!f.elements.name.value.trim() && !f.nickname.value.trim()) { toast('Type a name or a nick'); return; }
-      const p = await Store.addPlayer({ name: f.elements.name.value, nickname: f.nickname.value });
+      const p = await Store.addPlayer({ name: f.elements.name.value, nickname: f.nickname.value, gender: f.gender.value || null });
       if (p) { toast(`${fullName(p)} added as No. ${p.number}`); viewPlayers(); $('#addForm input').focus(); }
     });
   };
@@ -999,7 +1008,7 @@ function viewPlayers() {
   $$('[data-cancel]').forEach(b => b.onclick = () => { UI.editingPlayer = null; viewPlayers(); });
   $$('form.edit-player').forEach(f => f.onsubmit = e => {
     e.preventDefault();
-    const patch = { name: f.elements.name.value.trim(), nickname: f.nickname.value.trim() };
+    const patch = { name: f.elements.name.value.trim(), nickname: f.nickname.value.trim(), gender: f.gender.value || null };
     if (f.first_name) Object.assign(patch, { first_name: f.first_name.value, last_name: f.last_name.value, telegram: f.telegram.value });
     attempt(async () => { await Store.updatePlayer(f.dataset.id, patch); UI.editingPlayer = null; toast('Saved'); viewPlayers(); });
   });
@@ -1084,7 +1093,7 @@ function viewPlayer(id) {
         await Store.avatar.telegram(p0.id, self);
         toast('Photo taken from Telegram');
       } else if (act === 'remove') {
-        if (!confirm('Remove this photo? The hat icon will be shown instead.')) return;
+        if (!confirm('Remove this photo? The default icon will be shown instead.')) return;
         await Store.avatar.remove(p0.id, self);
         toast('Photo removed');
       }

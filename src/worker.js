@@ -12,8 +12,8 @@
  *   POST /api/auth/logout
  * Admin only:
  *   GET    /api/admin/players          players with private fields + linked accounts
- *   POST   /api/admin/players          { name, nickname }
- *   PATCH  /api/admin/players/:id      { name, nickname, first_name, last_name, telegram }
+ *   POST   /api/admin/players          { name, nickname, gender }
+ *   PATCH  /api/admin/players/:id      { name, nickname, gender, first_name, last_name, telegram }
  *   DELETE /api/admin/players/:id
  *   PATCH  /api/admin/accounts/:id     { player_id, role }
  *   POST   /api/admin/games            { date }
@@ -111,7 +111,7 @@ async function loadSettings(env) {
 
 async function getData(env) {
   const [players, games, seats, noms, events, settings] = await env.DB.batch([
-    env.DB.prepare("SELECT id, COALESCE(number, id) AS number, name, nickname, avatar_v, created_at FROM players WHERE status != 'hidden' ORDER BY id"),
+    env.DB.prepare("SELECT id, COALESCE(number, id) AS number, name, nickname, gender, avatar_v, created_at FROM players WHERE status != 'hidden' ORDER BY id"),
     env.DB.prepare('SELECT id, date, number, winner, notes, source FROM games ORDER BY date, number'),
     env.DB.prepare('SELECT game_id, seat, player_id, role, alive, fouls FROM game_seats ORDER BY game_id, seat'),
     env.DB.prepare('SELECT game_id, round, by_seat, target_seat, votes FROM nominations ORDER BY game_id, round, position'),
@@ -154,7 +154,7 @@ async function getData(env) {
     generatedAt: new Date().toISOString(),
     settings: s,
     // name + nick are public; real first/last names never leave the admin API. av = avatar version (photos are for logged-in users only)
-    players: players.results.map(p => ({ id: String(p.id), number: p.number, name: p.name || '', nickname: p.nickname, av: p.avatar_v || 0, createdAt: p.created_at })),
+    players: players.results.map(p => ({ id: String(p.id), number: p.number, name: p.name || '', nickname: p.nickname, gender: p.gender || null, av: p.avatar_v || 0, createdAt: p.created_at })),
     games: [...byGame.values()],
   };
 }
@@ -310,7 +310,7 @@ async function logout(request, env) {
 /* ---------------- admin: players & accounts ---------------- */
 async function adminPlayers(env) {
   const [players, accounts] = await env.DB.batch([
-    env.DB.prepare('SELECT id, COALESCE(number, id) AS number, name, nickname, first_name, last_name, status, notes, avatar_v, avatar_src, created_at FROM players ORDER BY id'),
+    env.DB.prepare('SELECT id, COALESCE(number, id) AS number, name, nickname, gender, first_name, last_name, status, notes, avatar_v, avatar_src, created_at FROM players ORDER BY id'),
     env.DB.prepare(`SELECT a.id, a.player_id, a.provider, a.provider_uid, a.username, a.display_name, a.role, a.status, a.last_login_at,
                            EXISTS (SELECT 1 FROM bot_chats c WHERE c.chat_id = a.provider_uid) AS bot
                       FROM accounts a ORDER BY a.id`),
@@ -322,6 +322,7 @@ async function adminPlayers(env) {
   };
 }
 
+const gender = v => (v === 'm' || v === 'f' ? v : null);   // anything else = not set
 async function createPlayer(env, body) {
   // A quick add may give only a name: the nick then starts as the name and can be changed later
   const name = str(body.name, 40);
@@ -331,9 +332,9 @@ async function createPlayer(env, body) {
   if (existing) throw new HttpError(409, `The nick "${nickname}" is already taken. Please choose another one.`);
   // Next free number after the highest one: deleting the newest player frees its number again
   const p = await env.DB.prepare(
-    'INSERT INTO players (name, nickname, number) VALUES (?, ?, (SELECT COALESCE(MAX(COALESCE(number, id)), 0) + 1 FROM players)) RETURNING id, number, name, nickname, created_at',
-  ).bind(name, nickname).first();
-  return { id: String(p.id), number: p.number, name: p.name || '', nickname: p.nickname, av: 0, createdAt: p.created_at };
+    'INSERT INTO players (name, nickname, gender, number) VALUES (?, ?, ?, (SELECT COALESCE(MAX(COALESCE(number, id)), 0) + 1 FROM players)) RETURNING id, number, name, nickname, gender, created_at',
+  ).bind(name, nickname, gender(body.gender)).first();
+  return { id: String(p.id), number: p.number, name: p.name || '', nickname: p.nickname, gender: p.gender || null, av: 0, createdAt: p.created_at };
 }
 
 async function updatePlayer(env, id, body) {
@@ -342,6 +343,7 @@ async function updatePlayer(env, id, body) {
   if (!cur) throw new HttpError(404, 'Player not found');
   const stmts = [];
   if ('name' in body) stmts.push(env.DB.prepare("UPDATE players SET name = ?, updated_at = datetime('now') WHERE id = ?").bind(str(body.name, 40), pid));
+  if ('gender' in body) stmts.push(env.DB.prepare("UPDATE players SET gender = ?, updated_at = datetime('now') WHERE id = ?").bind(gender(body.gender), pid));
   if ('nickname' in body) {
     const nickname = str(body.nickname, 60);
     if (!nickname) throw new HttpError(400, 'Nick is required');

@@ -392,3 +392,4 @@ canvas.crop:active { cursor: grabbing; }
   .player-photo .ava { width: 72px !important; height: 72px !important; }
   .my-details form .field input { min-width: 0; width: 100%; }
 }
+img.ava[src^="/images/ava-"] { box-shadow: 0 0 0 1px var(--border); }

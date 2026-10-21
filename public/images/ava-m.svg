@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs><clipPath id="c"><circle cx="50" cy="50" r="50"/></clipPath></defs>
+  <g clip-path="url(#c)" stroke-linejoin="round" stroke-linecap="round">
+    <rect width="100" height="100" fill="#0c0c0d"/>
+    <g transform="translate(50 55) scale(1.22) translate(-50 -50)">
+    <!-- coat: lit left side, dark right side with a light edge -->
+    <path d="M4 104 C8 86 20 76 37 71 L45 98 L40 104 Z" fill="#f1eee8"/>
+    <path d="M63 71 C80 76 92 86 96 104 L60 104 L55 98 Z" fill="#0c0c0d" stroke="#f1eee8" stroke-width="2"/>
+    <path d="M37 71 L43 76 L39 82 L46 100" fill="none" stroke="#0c0c0d" stroke-width="2.2"/>
+    <path d="M63 71 L57 76 L61 82 L54 100" fill="none" stroke="#f1eee8" stroke-width="2"/>
+    <!-- shirt + tie -->
+    <path d="M42 70 L50 79 L58 70 L56 66 L44 66 Z" fill="#f1eee8"/>
+    <path d="M47.5 76 L52.5 76 L54 96 L50 100 L46 96 Z" fill="#0c0c0d"/>
+    <!-- neck -->
+    <path d="M42 58 L42 68 L50 75 L50 62 Z" fill="#f1eee8"/>
+    <!-- face: left half lit, right half in shadow -->
+    <path d="M35 42 L35 52 L41 61.5 L50 66.5 L50 42 Z" fill="#f1eee8"/>
+    <path d="M50 42 L65 42 L65 52 L59 61.5 L50 66.5 Z" fill="#0c0c0d" stroke="#f1eee8" stroke-width="1.6"/>
+    <!-- ear -->
+    <path d="M35 47 C32 46 31 52 34.5 54" fill="#f1eee8" stroke="#0c0c0d" stroke-width="1"/>
+    <!-- sunglasses -->
+    <path d="M36 46 L49.5 46 L48.5 50.5 C46 53 40 53 37.5 50.5 Z" fill="#0c0c0d"/>
+    <path d="M51 46.5 C52 52 61 53 63.5 47.5" fill="none" stroke="#f1eee8" stroke-width="1.4"/>
+    <!-- nose + mouth -->
+    <path d="M50 49 L46.5 56.5 L50 57.5" fill="none" stroke="#0c0c0d" stroke-width="1.5"/>
+    <path d="M44.5 61 L50 60.5" fill="none" stroke="#0c0c0d" stroke-width="1.6"/>
+    <!-- hat -->
+    <path d="M31 38 C30 26 36 17 50 16.5 C64 17 70 26 69 38 Z" fill="#f1eee8"/>
+    <path d="M51 16.6 C64 17 70 26 69 38 L53 38 Z" fill="#0c0c0d" stroke="#f1eee8" stroke-width="1.6"/>
+    <path d="M45 18.5 C46.5 21 47 23.5 46.5 26" fill="none" stroke="#0c0c0d" stroke-width="1.5"/>
+    <path d="M31 33 C42 31 58 31 69 33 L69 37.5 C58 35.5 42 35.5 31 37.5 Z" fill="#0c0c0d"/>
+    <path d="M12 40 C22 34 78 32 88 37 C84 42 72 43 50 43 C30 43 16 43 12 40 Z" fill="#f1eee8"/>
+    <path d="M52 43 C72 43 84 42 88 37" fill="none" stroke="#0c0c0d" stroke-width="1.4"/>
+  </g>
+  </g>
+</svg>
