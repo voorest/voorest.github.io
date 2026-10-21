@@ -61,20 +61,22 @@ const playerHref = pOrId => {
   const p = typeof pOrId === 'object' && pOrId ? pOrId : Store.player(pOrId);
   return `/player/${p && p.number ? p.number : pOrId}`;
 };
-/* Avatars: real photos only for logged-in people (served by /api/avatar), the hat icon for everyone else. */
+/* Avatars: real photos only for logged-in people (served by /api/avatar), the default icon for everyone else.
+   Sizes live in CSS: .ava = 32px (lists), .ava-lg = the player page. */
 const HAT_SVG = '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M13 58c2-12 9-18 19-18s17 6 19 18" fill="currentColor" opacity=".5"/><circle cx="32" cy="32" r="9.5" fill="currentColor" opacity=".5"/><path d="M14 25.5c5 1.6 31 1.6 36 0-1 2.4-3.5 3.6-6 3.6H20c-2.5 0-5-1.2-6-3.6z" fill="currentColor"/><path d="M21.5 25.5l2.2-10.2C24.5 12 26.7 11 32 11s7.5 1 8.3 4.3l2.2 10.2z" fill="currentColor"/><path d="M22.6 21h18.8l.6 3H22z" fill="var(--accent)"/></svg>';
-function avatar(p, size = 28) {
+function avatar(p, large = false) {
+  const cls = large ? 'ava ava-lg' : 'ava';
   const pl = p && typeof p === 'object' ? p : Store.player(p);
   const g = pl ? (Store.player(pl.id) || pl).gender : null;
   if (Store.isLive() && Store.user() && pl && pl.av) {
-    return `<img class="ava" src="/api/avatar/${pl.number}?v=${pl.av}" width="${size}" height="${size}" alt="" loading="lazy" onerror="this.outerHTML=ICON_HTML(${size},'${g || ''}')">`;
+    return `<img class="${cls}" src="/api/avatar/${pl.number}?v=${pl.av}" alt="" loading="lazy" onerror="this.outerHTML=ICON_HTML('${cls}','${g || ''}')">`;
   }
-  return ICON_HTML(size, g);
+  return ICON_HTML(cls, g);
 }
 /** Default picture: the man / woman icon when gender is set, otherwise the neutral hat. */
-function ICON_HTML(size, g) {
-  if (g === 'm' || g === 'f') return `<span class="ava ava-icon" style="width:${size}px;height:${size}px"><img src="/images/mafia-${g === 'm' ? 'man' : 'woman'}.svg" alt=""></span>`;
-  return `<span class="ava ava-hat" style="width:${size}px;height:${size}px">${HAT_SVG}</span>`;
+function ICON_HTML(cls, g) {
+  if (g === 'm' || g === 'f') return `<span class="${cls} ava-icon"><img src="/images/mafia-${g === 'm' ? 'man' : 'woman'}.svg" alt=""></span>`;
+  return `<span class="${cls} ava-hat">${HAT_SVG}</span>`;
 }
 const genderSelect = v => `<select name="gender" title="Picks the default icon when there is no photo">
   <option value="">— gender —</option><option value="m"${v === 'm' ? ' selected' : ''}>Man</option><option value="f"${v === 'f' ? ' selected' : ''}>Woman</option></select>`;
@@ -391,7 +393,7 @@ function viewDashboard() {
             ${sorted.map((p, i) => `
               <tr>
                 <td class="muted">${i + 1}</td>
-                <td class="who-cell"><a href="${playerHref(p)}">${avatar(p, 24)}<span>${h(p.nick)}</span></a></td>
+                <td class="who-cell"><a href="${playerHref(p)}">${avatar(p)}<span>${h(p.nick)}</span></a></td>
                 <td>${p.games}</td>
                 <td>${p.wins}</td>
                 <td>${pct(p.winRate)}</td>
@@ -547,7 +549,7 @@ function viewGame(id) {
     const f = alive ? null : tl.fates[s.seat];
     return `<tr class="${alive ? '' : 'dead'}">
       <td class="seatno">${s.seat}</td>
-      <td>${ro ? (s.playerId ? `<a class="who-cell" href="${playerHref(s.playerId)}">${avatar(s.playerId, 24)}<span>${h(name(s.seat))}</span></a>` : '—') : `<select data-act="seat-player" data-seat="${s.seat}" class="${s.playerId && used[s.playerId] > 1 ? 'bad' : ''}">
+      <td>${ro ? (s.playerId ? `<a class="who-cell" href="${playerHref(s.playerId)}">${avatar(s.playerId)}<span>${h(name(s.seat))}</span></a>` : '—') : `<select data-act="seat-player" data-seat="${s.seat}" class="${s.playerId && used[s.playerId] > 1 ? 'bad' : ''}">
         <option value="">— pick player —</option>
         ${players.map(p => `<option value="${p.id}" ${p.id === s.playerId ? 'selected' : ''}>${h(fullName(p))}${used[p.id] && p.id !== s.playerId ? ' (seated)' : ''}</option>`).join('')}
       </select>`}</td>
@@ -921,7 +923,7 @@ function viewPlayers() {
     }
     return `<tr data-name="${h((fullName(p) + ' ' + (pv.first_name || '') + ' ' + (pv.last_name || '') + ' ' + tg.map(a => a.username).join(' ')).toLowerCase())}">
       ${edit ? `<td class="muted">${p.number}</td>` : ''}
-      <td class="who-cell"><a href="${playerHref(p)}">${avatar(p, 24)}<span>${h(fullName(p))}</span></a></td>
+      <td class="who-cell"><a href="${playerHref(p)}">${avatar(p)}<span>${h(fullName(p))}</span></a></td>
       ${adminLive ? `<td>${h([pv.first_name, pv.last_name].filter(Boolean).join(' ')) || '<span class="muted">—</span>'}</td>
         <td>${tg.length ? tg.map(a => {
           const label = a.username ? '@' + a.username : (a.display_name || 'Telegram');
@@ -1062,7 +1064,7 @@ function viewPlayer(id) {
   const head = `
     <div class="page-head">
       <div class="player-head">
-        <div class="player-photo">${avatar(p0, 96)}</div>
+        <div class="player-photo">${avatar(p0, true)}</div>
         <div><a href="/players" class="back">← Players</a><h1>${h(fullName(p0))}${mine ? ' <span class="chip win">you</span>' : ''}</h1>
           ${canPhoto ? `<div class="row gap wrap photo-actions">
             <button class="btn small" data-photo="upload">📷 ${p0.av ? 'Change photo' : 'Add photo'}</button>

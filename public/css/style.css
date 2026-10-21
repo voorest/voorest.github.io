@@ -370,10 +370,13 @@ tr.row-link { cursor: pointer; }
 tr.row-link:hover td { background: var(--surface-2); }
 
 /* Avatars */
-.ava { display: inline-block; border-radius: 50%; object-fit: cover; flex: none; vertical-align: middle; background: var(--surface-2); }
-.ava-hat { display: inline-flex; align-items: center; justify-content: center; color: var(--muted); border: 1px solid var(--border); overflow: hidden; }
+.ava { display: block; flex: none; width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: var(--surface-2); }
+.ava-lg { width: 96px; height: 96px; }
+.ava-hat { display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--muted); border: 1px solid var(--border); }
 .ava-hat svg { width: 78%; height: 78%; }
-.who-cell a, a.who-cell { display: inline-flex; align-items: center; gap: 8px; }
+.ava-icon { overflow: hidden; background: #f1eee8; box-shadow: 0 0 0 1px var(--border); }
+.ava-icon img { display: block; width: 100%; height: 100%; }
+a.who-cell, .who-cell > a { display: flex; align-items: center; gap: 8px; }
 .player-head { display: flex; align-items: center; gap: 16px; }
 .player-head h1 { margin: 2px 0 6px; }
 .player-photo .ava { box-shadow: 0 0 0 2px var(--accent); }
@@ -389,9 +392,6 @@ canvas.crop:active { cursor: grabbing; }
 
 @media (max-width: 640px) {
   .player-head { gap: 12px; }
-  .player-photo .ava { width: 72px !important; height: 72px !important; }
+  .ava-lg { width: 72px; height: 72px; }
   .my-details form .field input { min-width: 0; width: 100%; }
 }
-/* Default man / woman icons: black drawing with see-through details on a light disc, the outer margin cropped */
-.ava-icon { overflow: hidden; background: #f1eee8; box-shadow: 0 0 0 1px var(--border); }
-.ava-icon img { display: block; width: 112%; height: 112%; margin: -6%; max-width: none; }
