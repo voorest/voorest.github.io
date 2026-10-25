@@ -103,7 +103,7 @@ Sessions are stored in D1 as SHA-256 hashes; the cookie is HttpOnly.
 ## Ratings (fair comparison, may be tuned)
 - `rating = (wins + K·avg) / (games + K)`, K = 5 (Settings).
 - Role ratings use each role's own average.
-- "± exp." = wins minus the wins expected from the roles a player received.
+- "± exp." (Ukrainian label "Понад норму") = wins minus the wins expected from the roles a player received.
 - Titles: King (best rating, min games), Best Role Player (above average in 3+ roles), Best Sheriff/Don/Mafia/Citizen/Doctor/Maniac, Sharp Eye, Survivor, Most Loyal, Night Target.
 
 ## Day stats post (template built; topic + hidden links still to do)
