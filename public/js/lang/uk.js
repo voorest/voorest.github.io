@@ -130,7 +130,7 @@ I18N.dict.uk = {
   "As a citizen, nominates mafia most often": "Будучи мирним, найчастіше висуває мафію",
   "{p} of {n}": "{p} із {n}",
   "min 5 nominations as citizen": "від 5 висувань у ролі мирного",
-  "Survivor": "Найживучіший",
+  "Survivor": "Живучий",
   "Most often alive at the end": "Найчастіше доживає до кінця гри",
   "{a} of {n}": "{a} із {n}",
   "most games survived": "найбільше ігор живим",
@@ -537,5 +537,8 @@ I18N.dict.uk = {
   "Mafia in Barcelona": "Мафія в Барселоні",
   "Menu": "Меню",
   "Close": "Закрити",
-  "Write to the game master in Telegram": "Написати ведучому в Telegram"
+  "Write to the game master in Telegram": "Написати ведучому в Telegram",
+  "King": "Король",
+  "Many roles": "Різні ролі",
+  "Loyal": "Відданий"
 };

@@ -1310,13 +1310,16 @@ function viewCompare(aNo, bNo) {
 
   const options = sel => ranked.map(p => `<option value="${p.number}" ${p.id === sel.id ? 'selected' : ''}>#${place(p)} ${h(fullName(p))}</option>`).join('');
   const card = (p, side) => {
-    const held = titles.filter(x => x.player && x.player.id === p.id);
-    return `<div class="cmp-card">
+    return `<div class="cmp-card cmp-card-${side}">
       <select class="cmp-select" data-side="${side}" aria-label="${t('Player')}">${options(p)}</select>
       <a class="cmp-who" href="${playerHref(p)}">${avatar(p, true)}<span>${h(fullName(p))}${me && me.id === p.id ? ` <span class="chip win">${t('you')}</span>` : ''}</span></a>
       <div class="cmp-big"><b>${pct(p.rating)}</b> <span class="muted">· #${place(p)}</span></div>
-      <div class="cmp-titles">${held.map(x => `<span class="chip" title="${h(x.desc)}">${x.icon} ${h(x.title)}</span>`).join('') || `<span class="muted small">${t('No titles yet')}</span>`}</div>
     </div>`;
+  };
+  // Titles go under the cards as short chips (full name on hover), so both cards stay the same height
+  const titlesOf = (p, side) => {
+    const held = titles.filter(x => x.player && x.player.id === p.id);
+    return `<div class="cmp-titles cmp-titles-${side}">${held.map(x => `<span class="chip" title="${h(x.title)} · ${h(x.desc)}">${x.icon} ${h(x.short)}</span>`).join('') || `<span class="muted small">${t('No titles yet')}</span>`}</div>`;
   };
   const lead = leadA === leadB ? t('Even: {a} : {b}', { a: leadA, b: leadB })
     : t('{name} is ahead in {n} of {m} rows', { name: h((leadA > leadB ? A : B).nick), n: Math.max(leadA, leadB), m: leadA + leadB });
@@ -1327,6 +1330,7 @@ function viewCompare(aNo, bNo) {
       ${card(A, 'a')}
       <button class="btn ghost cmp-swap" id="cmpSwap" title="${t('Swap')}" aria-label="${t('Swap')}">⇄</button>
       ${card(B, 'b')}
+      ${titlesOf(A, 'a')}${titlesOf(B, 'b')}
     </section>
     <p class="cmp-lead muted">${lead}</p>
     ${sections.map(([title, rows]) => `
