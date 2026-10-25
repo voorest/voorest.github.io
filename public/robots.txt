@@ -1,0 +1,8 @@
+# Mafia BCN — https://mafiabcn.com
+# Public pages (dashboard, games, players, compare, about) may be indexed.
+# The API (data, login, admin) is not for search engines.
+User-agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://mafiabcn.com/sitemap.xml

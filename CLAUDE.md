@@ -51,6 +51,14 @@ Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (do
 - Public pages show only the dashboard, games and player stats, by nickname.
 - **Compare** (`/compare/<No.>/<No.>`, menu "Порівняння", also "⇄ Compare" on every player page): two players side by side (rating, place, games, win %, ± exp., alive, each role, game facts, titles); green = better in that row, rows like games/shot are neutral. Default: you vs the top player (the 2nd if you are the top); visitors see #1 vs #2. Picking the other side's player swaps them. Only two players for now; no head-to-head (pair stats were dropped).
 
+## Search engines & link previews (open for indexing, Oct 2026)
+- `public/robots.txt`: everything allowed except `/api/`; points to the sitemap.
+- `/sitemap.xml` is built by the Worker (`src/seo.js`) from the KV public copy: home, games, players, compare, about, every player and every finished game, each in uk and en.
+- Every page is index.html; the Worker fills the `<!-- seo -->…<!-- /seo -->` block per page: title, description, canonical, hreflang (uk = plain address, en = `?lang=en`), Open Graph (logo `android-chrome-512x512.png`) and JSON-LD on the home page. Player pages use the nick from the KV copy. Admin/private pages (`/data`, `/settings`, `/bot`, `/me`, `/game/new`) get `noindex`.
+- `?lang=en|uk` in the address sets the site language (and is removed when the visitor switches language).
+- `/about` ("Про Mafia BCN", footer link): who we are, how the game works, roles, what the site shows, "want to play?" (no contact yet). Visitors also see a one-line intro with a link on the dashboard.
+- Google Search Console: the owner verifies the domain himself (Cloudflare one-click), then submits `https://mafiabcn.com/sitemap.xml`.
+
 ## Login
 Telegram OpenID Connect (authorization code + PKCE). BotFather → Login Widget:
 - redirect URL `/api/auth/telegram/callback`;

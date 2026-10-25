@@ -15,7 +15,12 @@
 
 const LANGS = { uk: 'UA', en: 'EN' };
 const I18N = {
-  lang: (() => { try { return localStorage.getItem('mbcn.lang') === 'en' ? 'en' : 'uk'; } catch { return 'uk'; } })(),
+  // ?lang=en / ?lang=uk in the address wins (search engines index each language at its own address), then the saved choice
+  lang: (() => {
+    const q = new URLSearchParams(location.search).get('lang');
+    if (q === 'en' || q === 'uk') { try { localStorage.setItem('mbcn.lang', q); } catch { /* private mode */ } return q; }
+    try { return localStorage.getItem('mbcn.lang') === 'en' ? 'en' : 'uk'; } catch { return 'uk'; }
+  })(),
   dict: { uk: {} },   // filled by /js/lang/uk.js
 };
 
@@ -61,15 +66,20 @@ const locale = () => (I18N.lang === 'uk' ? 'uk-UA' : 'en-GB');
 const roleLabel = r => t(ROLES[r].label);
 const teamLabel = w => t(TEAM_LABEL[w]);
 
+/** Browser tab title: "Games — Mafia BCN", or the site title for the home page. */
+function setTitle(part) {
+  document.title = part ? `${part} — Mafia BCN` : t('Mafia BCN — Mafia games in Barcelona: stats, ratings, titles');
+}
 /** Texts that live in index.html (menu, page title): elements with data-i18n="English text". */
 function applyStaticTexts() {
   document.documentElement.lang = I18N.lang;
-  document.title = t('Mafia BCN — Game Log');
   document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll('[data-lang]').forEach(b => b.classList.toggle('on', b.dataset.lang === I18N.lang));
 }
 function setLang(lang) {
   I18N.lang = LANGS[lang] ? lang : 'uk';
   try { localStorage.setItem('mbcn.lang', I18N.lang); } catch { /* private mode: the choice lasts until reload */ }
+  // a ?lang= in the address would bring the old language back on reload
+  if (/[?&]lang=/.test(location.search)) { const u = new URL(location.href); u.searchParams.delete('lang'); history.replaceState(null, '', u.pathname + u.search); }
   applyStaticTexts();
 }

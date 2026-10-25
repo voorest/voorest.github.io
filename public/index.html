@@ -3,7 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mafia BCN — Game Log</title>
+  <!-- seo --><!-- the Worker replaces this block with the page's own title, description and preview tags (src/seo.js) -->
+  <title>Mafia BCN — Мафія в Барселоні: статистика, рейтинг, титули</title>
+  <meta name="description" content="Mafia BCN — україномовна спільнота гри в Мафію в Барселоні. Результати всіх ігор, чесний рейтинг гравців, титули, ролі та особиста статистика.">
+  <!-- /seo -->
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
@@ -31,7 +34,14 @@
     <div id="auth" class="auth"></div>
   </header>
   <div id="banner"></div>
-  <main id="app"></main>
+  <main id="app">
+    <noscript>
+      <h1>Mafia BCN — Мафія в Барселоні</h1>
+      <p>Україномовна спільнота гри в Мафію в Барселоні: результати всіх ігор, рейтинг гравців, титули та особиста статистика. Для перегляду увімкніть JavaScript.</p>
+      <p lang="en">A Ukrainian-speaking community playing Mafia in Barcelona: results of every game, player ratings, titles and personal stats. Please enable JavaScript.</p>
+    </noscript>
+  </main>
+  <footer class="site-foot"><a href="/about" data-i18n="About Mafia BCN">About Mafia BCN</a><span>·</span><a href="https://t.me/mafia_bcn_bot" target="_blank" rel="noopener">@mafia_bcn_bot</a></footer>
   <div id="toast" role="status" aria-live="polite"></div>
 
   <!-- Plain scripts (no build step) so the site also works by double-clicking index.html -->

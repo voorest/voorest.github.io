@@ -44,6 +44,7 @@
  */
 
 import { BotError, displayName, telegramPhoto, handleWebhook, botStatus, botChats, botPosts, botPreview, botSetup, createPost, processPost, editPost, deletePost } from './bot.js';
+import { seoPage, sitemap } from './seo.js';
 
 const ROLES = ['citizen', 'sheriff', 'doctor', 'maniac', 'mafia', 'don'];
 const NIGHT_KINDS = { mafiaKill: 'mafia_kill', donCheck: 'don_check', sheriffCheck: 'sheriff_check', maniacKill: 'maniac_kill', doctorHeal: 'doctor_heal' };
@@ -889,9 +890,10 @@ export default {
         return json({ error: 'Server error' }, 500);
       }
     }
-    // Site pages (/games, /game/17-05-2026/1, /player/27 …) are all the same index.html;
-    // the browser-side router picks the view from the address.
-    if (!/\.[a-z0-9]+$/i.test(url.pathname)) return env.ASSETS.fetch(new Request(new URL('/', url), request));
+    if (url.pathname === '/sitemap.xml') return sitemap(env, url, SNAPSHOT_KEY);
+    // Site pages (/games, /game/17-05-2026/1, /player/27 …) are all the same index.html, with this page's
+    // title/description for search engines and link previews; the browser-side router picks the view.
+    if (!/\.[a-z0-9]+$/i.test(url.pathname) || url.pathname === '/index.html') return seoPage(request, env, url, SNAPSHOT_KEY);
     return env.ASSETS.fetch(request);
   },
 };

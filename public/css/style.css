@@ -422,3 +422,16 @@ canvas.crop:active { cursor: grabbing; }
   .cmp-big { font-size: 1.15rem; }
   .cmp-table th[scope="row"] { width: 40%; }
 }
+
+/* Footer */
+.site-foot { max-width: 1180px; margin: 2rem auto 0; padding: 1.2rem 16px 2rem; display: flex; gap: .6rem; justify-content: center; flex-wrap: wrap; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--border); }
+.site-foot a { color: var(--muted); }
+.site-foot a:hover { color: var(--text); }
+.intro { color: var(--muted); max-width: 70ch; margin: -.25rem 0 1.2rem; }
+.about { max-width: 760px; }
+.about h2 { margin-top: 1.4rem; }
+.about ul { padding-left: 1.2rem; }
+.about li { margin: .3rem 0; }
+.about .roles-list { list-style: none; padding: 0; display: grid; gap: .45rem; }
+.about .roles-list li { display: flex; gap: .6rem; align-items: baseline; }
+.about .roles-list .chip { flex: none; min-width: 5.5rem; text-align: center; }

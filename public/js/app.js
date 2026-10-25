@@ -259,9 +259,11 @@ function route() {
   document.querySelectorAll('#nav [data-admin-live]').forEach(a => { a.hidden = !Store.isAdmin(); });
   if ((!adminPages && (view === 'data' || view === 'settings')) || (view === 'bot' && !Store.isAdmin())) { go('/dashboard', { replace: true }); return; }
   if (view !== 'bot') UI.botTabs = null; // loaded bot lists live only while you stay on the Bot page
+  const pageTitles = { games: t('Games'), players: t('Players'), compare: t('Compare players'), data: t('Data'), settings: t('Settings'), bot: t('Bot') };
+  setTitle(pageTitles[view] || '');   // player and game pages set their own title
   const views = {
     dashboard: viewDashboard, games: viewGames, game: () => viewGame(id),
-    players: viewPlayers, player: () => viewPlayer(id), compare: () => viewCompare(parts[1], parts[2]), data: viewData, settings: viewSettings, bot: viewBot,
+    players: viewPlayers, player: () => viewPlayer(id), compare: () => viewCompare(parts[1], parts[2]), about: viewAbout, data: viewData, settings: viewSettings, bot: viewBot,
     me: () => { const u = Store.user(); if (u && u.playerId) viewPlayer(u.playerId); else viewDashboard(); },
     'login-error': () => { $app.innerHTML = `<div class="empty"><h2>${t('Login did not work')}</h2><p>${h(decodeURIComponent(id || ''))}</p><p><a class="btn" href="/api/auth/telegram/start">${t('Try again')}</a></p></div>`; },
   };
@@ -359,6 +361,7 @@ function viewDashboard() {
 
   $app.innerHTML = `
     <div class="page-head"><h1>${t('Dashboard')}</h1>${Store.canEdit() ? `<a class="btn primary" href="/games">${t('+ Record a game')}</a>` : ''}</div>
+    ${Store.user() ? '' : `<p class="intro">${t('Mafia BCN is a Ukrainian-speaking community playing Mafia in Barcelona. Here are the results of all our games, a fair player rating and titles.')} <a href="/about">${t('More about us →')}</a></p>`}
 
     <section class="kpis">
       <div class="kpi"><span class="kpi-val">${T.games}</span><span class="kpi-lbl">${t('Games played')}</span></div>
@@ -525,6 +528,7 @@ function viewGame(id) {
   const orig = isNew ? (UI.draft && UI.draft.id === 'new' && Store.canEdit() ? UI.draft.g : null) : Store.game(id);
   if (!orig) { $app.innerHTML = `<div class="empty">${t('Game not found.')} <a href="/games">${t('Back to games')}</a></div>`; return; }
   const ro = !Store.canEdit();
+  setTitle(isNew ? t('New game') : `${t('Game #{n}', { n: orig.number })} · ${isoToDmy(orig.date)}`);
   // Editing works on a draft copy; nothing is stored until "Save changes".
   if (!ro && (!UI.draft || UI.draft.id !== orig.id)) UI.draft = { id: orig.id, g: JSON.parse(JSON.stringify(orig)), base: JSON.stringify(orig), path: location.pathname };
   const g = ro ? orig : UI.draft.g;
@@ -1057,6 +1061,7 @@ function viewPlayers() {
 function viewPlayer(id) {
   const p0 = Store.player(id);
   if (!p0) { $app.innerHTML = `<div class="empty">${t('Player not found.')} <a href="/players">${t('Back')}</a></div>`; return; }
+  setTitle(fullName(p0));
   const st = Stats.compute(Store.get());
   const p = st.players.find(x => x.id === p0.id);
   const ranked = [...st.players].sort((a, b) => b.rating - a.rating);
@@ -1176,6 +1181,44 @@ function viewPlayer(id) {
     </section>
   `;
   wireHead();
+}
+
+/* ============================================================
+   ABOUT — who we are, how the game works, what the site shows (public, for new people and search engines)
+   ============================================================ */
+function viewAbout() {
+  document.title = `${t('About Mafia BCN')} — ${t('Mafia in Barcelona')}`;
+  const roleLine = (r, text) => `<li>${roleChip(r)}<span>${text}</span></li>`;
+  $app.innerHTML = `
+    <article class="about">
+      <div class="page-head"><h1>${t('About Mafia BCN')}</h1></div>
+      <p>${t('<b>Mafia BCN</b> is a Ukrainian-speaking community in Barcelona that plays Mafia, the classic party game of logic, bluff and intuition. We usually meet on Sundays and play several games in an evening, with 7 to 16 players at the table.')}</p>
+
+      <h2>${t('How the game works')}</h2>
+      <p>${t('Every player secretly gets a role. The citizens, together with the sheriff, the doctor and the maniac, try to find the mafia. The mafia and their don try to stay hidden until they are as many as the citizens.')}</p>
+      <p>${t('Each round has a <b>night</b>, when the mafia shoots and the sheriff and the don check players, and a <b>day</b>, when everyone talks, nominates suspects and votes someone out.')}</p>
+      <ul class="roles-list">
+        ${roleLine('citizen', t('finds the mafia by talking and voting.'))}
+        ${roleLine('sheriff', t('checks one player every night: mafia or not.'))}
+        ${roleLine('doctor', t('heals one player every night and can save them from a shot.'))}
+        ${roleLine('maniac', t('shoots on his own at night, but plays on the citizens’ side.'))}
+        ${roleLine('mafia', t('shoots one player every night and wins by numbers.'))}
+        ${roleLine('don', t('leads the mafia and looks for the sheriff at night.'))}
+      </ul>
+
+      <h2>${t('What you will find on this site')}</h2>
+      <ul>
+        <li>${t('The result of every game: roles, nights, nominations and votes.')}</li>
+        <li>${t('A fair rating: the win rate adjusted for the number of games, so 8 wins of 10 rank higher than 2 of 2.')}</li>
+        <li>${t('Titles: King of the Game, the best sheriff, don, doctor and more.')}</li>
+        <li>${t('A page for every player and a comparison of any two players.')}</li>
+        <li>${t('Telegram bot <b>@mafia_bcn_bot</b>: send /mystats to get your own stats.')}</li>
+      </ul>
+
+      <h2>${t('Want to play?')}</h2>
+      <p>${t('New players are always welcome. No experience is needed: the game master explains the rules before the game.')}</p>
+      <p class="row gap wrap"><a class="btn primary" href="/">${t('See the stats')}</a><a class="btn ghost" href="/games">${t('All games')}</a></p>
+    </article>`;
 }
 
 /* ============================================================
