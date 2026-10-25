@@ -435,3 +435,28 @@ canvas.crop:active { cursor: grabbing; }
 .about .roles-list { list-style: none; padding: 0; display: grid; gap: .45rem; }
 .about .roles-list li { display: flex; gap: .6rem; align-items: baseline; }
 .about .roles-list .chip { flex: none; min-width: 5.5rem; text-align: center; }
+
+/* Phone menu: burger button + side panel (login on top, then the menu items) */
+.auth .who { display: inline-flex; align-items: center; gap: .45rem; }
+.auth .who .ava { width: 26px; height: 26px; }
+.menu-btn, .drawer-close { display: none; background: none; border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: .3rem; cursor: pointer; line-height: 0; }
+.menu-btn:hover, .drawer-close:hover { background: var(--surface-2); }
+.drawer-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, .55); }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 61; width: min(320px, 86vw); background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; animation: drawer-in .18s ease-out; }
+.drawer[hidden], .drawer-backdrop[hidden] { display: none; }
+@keyframes drawer-in { from { transform: translateX(100%); } to { transform: none; } }
+.drawer-head { display: flex; align-items: flex-start; gap: .75rem; padding: 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.drawer-head .drawer-close { display: block; margin-left: auto; }
+.drawer-auth { display: flex; flex-direction: column; align-items: flex-start; gap: .6rem; min-width: 0; }
+.drawer-auth .who { display: flex; align-items: center; gap: .5rem; font-weight: 600; }
+.drawer-auth .who .ava { width: 36px; height: 36px; }
+.drawer-nav { display: flex; flex-direction: column; padding: 8px; }
+.drawer-nav a { color: var(--text); padding: .8rem .9rem; border-radius: 8px; font-size: 1.02rem; }
+.drawer-nav a:hover { background: var(--surface-2); text-decoration: none; }
+.drawer-nav a.active { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--accent); }
+body.menu-open { overflow: hidden; }
+@media (max-width: 760px) {
+  .topbar { flex-wrap: nowrap; }
+  .topbar nav, .topbar .auth { display: none; }
+  .menu-btn { display: block; }
+}

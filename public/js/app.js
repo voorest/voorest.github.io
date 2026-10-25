@@ -199,23 +199,39 @@ function loadDemo() {
 }
 
 /* ---------- top bar: login + save status ---------- */
-function renderAuth() {
-  const el = document.getElementById('auth');
-  const me = document.getElementById('navMe');
+/** Login area: who you are + Log out, or the login button. Same markup in the top bar and in the phone menu. */
+function authHtml() {
   const u = Store.user();
-  me.hidden = !(u && u.playerId);
-  if (!Store.isLive()) { el.innerHTML = `<span class="chip muted">${t('local mode')}</span>`; return; }
+  if (!Store.isLive()) return `<span class="chip muted">${t('local mode')}</span>`;
   if (u) {
-    el.innerHTML = `<span class="who">${h(u.nickname || (u.username ? '@' + u.username : u.name || t('you')))}${u.role === 'admin' ? ` <span class="chip admin">${t('admin')}</span>` : ''}</span>
-      <button class="btn small ghost" id="logoutBtn">${t('Log out')}</button>`;
-    document.getElementById('logoutBtn').onclick = () => attempt(() => Store.logout());
-  } else if (Store.devLogin()) {
-    el.innerHTML = `<a class="btn small" href="/api/auth/dev-login">${t('Dev login (local admin)')}</a>`;
-  } else if (Store.loginAvailable()) {
-    el.innerHTML = `<a class="btn small tg" href="/api/auth/telegram/start?back=${encodeURIComponent(location.pathname)}">${t('Log in with Telegram')}</a>`;
-  } else {
-    el.innerHTML = '';
+    const me = u.playerId ? Store.player(u.playerId) : null;
+    return `<span class="who">${me ? avatar(me) : ''}<span>${h(u.nickname || (u.username ? '@' + u.username : u.name || t('you')))}</span>${u.role === 'admin' ? ` <span class="chip admin">${t('admin')}</span>` : ''}</span>
+      <button class="btn small ghost logout-btn">${t('Log out')}</button>`;
   }
+  if (Store.devLogin()) return `<a class="btn small" href="/api/auth/dev-login">${t('Dev login (local admin)')}</a>`;
+  if (Store.loginAvailable()) return `<a class="btn small tg" href="/api/auth/telegram/start?back=${encodeURIComponent(location.pathname)}">${t('Log in with Telegram')}</a>`;
+  return '';
+}
+function renderAuth() {
+  const u = Store.user();
+  document.getElementById('navMe').hidden = !(u && u.playerId);
+  const html = authHtml();
+  document.getElementById('auth').innerHTML = html;
+  document.getElementById('drawerAuth').innerHTML = html;
+  document.querySelectorAll('.logout-btn').forEach(b => { b.onclick = () => attempt(() => Store.logout()); });
+}
+/* ---------- phone menu (burger → side panel with login on top and the menu items) ---------- */
+function renderMenu() {
+  document.getElementById('drawerNav').innerHTML = [...document.querySelectorAll('#nav a')].filter(a => !a.hidden)
+    .map(a => `<a href="${a.getAttribute('href')}" class="${a.classList.contains('active') ? 'active' : ''}">${h(a.textContent)}</a>`).join('')
+    + `<a href="/about" class="${location.pathname === '/about' ? 'active' : ''}">${t('About Mafia BCN')}</a>`;
+}
+function setMenu(open) {
+  const drawer = document.getElementById('drawer'), back = document.getElementById('drawerBackdrop'), btn = document.getElementById('menuBtn');
+  drawer.hidden = back.hidden = !open;
+  btn.setAttribute('aria-expanded', String(open));
+  document.body.classList.toggle('menu-open', open);
+  if (open) document.getElementById('drawerClose').focus();
 }
 Store.onSaveState((s, msg) => {
   const el = document.getElementById('saveState');
@@ -248,7 +264,7 @@ function route() {
       : `<div class="demo-banner subtle">${t('Local mode — data is stored in this browser only.')}</div>`;
   } else if (Store.throttleWait()) {
     banner = `<div class="demo-banner subtle">${t('Showing your saved copy of the data — too many refreshes, the next update check is possible in {s} s.', { s: Store.throttleWait() })}</div>`;
-  } else if (Store.isAdmin()) {
+  } else if (Store.isAdmin() && view === 'game') {   // only where games are edited
     banner = `<div class="demo-banner subtle">${t('Admin mode — game changes are stored only when you press <b>Save changes</b>.')}</div>`;
   }
   document.getElementById('banner').innerHTML = banner;
@@ -257,6 +273,8 @@ function route() {
   const adminPages = Store.canEdit();
   document.querySelectorAll('#nav [data-admin]').forEach(a => { a.hidden = !adminPages; });
   document.querySelectorAll('#nav [data-admin-live]').forEach(a => { a.hidden = !Store.isAdmin(); });
+  setMenu(false);
+  renderMenu();
   if ((!adminPages && (view === 'data' || view === 'settings')) || (view === 'bot' && !Store.isAdmin())) { go('/dashboard', { replace: true }); return; }
   if (view !== 'bot') UI.botTabs = null; // loaded bot lists live only while you stay on the Bot page
   const pageTitles = { games: t('Games'), players: t('Players'), compare: t('Compare players'), data: t('Data'), settings: t('Settings'), bot: t('Bot') };
@@ -1217,7 +1235,7 @@ function viewAbout() {
 
       <h2>${t('Want to play?')}</h2>
       <p>${t('New players are always welcome. No experience is needed: the game master explains the rules before the game.')}</p>
-      <p class="row gap wrap"><a class="btn primary" href="/">${t('See the stats')}</a><a class="btn ghost" href="/games">${t('All games')}</a></p>
+      <p class="row gap wrap"><a class="btn tg" href="https://t.me/voorest" target="_blank" rel="noopener">${t('Write to the game master in Telegram')}</a><a class="btn" href="/">${t('See the stats')}</a><a class="btn ghost" href="/games">${t('All games')}</a></p>
     </article>`;
 }
 
@@ -1845,6 +1863,10 @@ async function viewBot({ refresh = false } = {}) {
 (async () => {
   applyStaticTexts();
   document.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => { if (b.dataset.lang !== I18N.lang) { setLang(b.dataset.lang); route(); } });
+  document.getElementById('menuBtn').onclick = () => setMenu(document.getElementById('drawer').hidden);
+  document.getElementById('drawerClose').onclick = () => setMenu(false);
+  document.getElementById('drawerBackdrop').onclick = () => setMenu(false);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !document.getElementById('drawer').hidden) setMenu(false); });
   $app.innerHTML = `<div class="empty">${t('Loading…')}</div>`;
   // Old links looked like /#/game/…; turn them into plain paths
   if (location.hash.startsWith('#/')) history.replaceState(null, '', (location.hash.slice(1) || '/') + location.search);

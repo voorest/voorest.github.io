@@ -32,7 +32,21 @@
     <span id="saveState" class="save-state" aria-live="polite"></span>
     <div class="lang-switch" role="group" aria-label="Language"><button type="button" data-lang="uk">UA</button><button type="button" data-lang="en">EN</button></div>
     <div id="auth" class="auth"></div>
+    <!-- phones: the menu and the login live in a side panel opened by this button -->
+    <button type="button" class="menu-btn" id="menuBtn" aria-controls="drawer" aria-expanded="false" aria-label="Menu" data-i18n-label="Menu">
+      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
   </header>
+  <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+  <aside class="drawer" id="drawer" hidden aria-label="Menu" data-i18n-label="Menu">
+    <div class="drawer-head">
+      <div id="drawerAuth" class="drawer-auth"></div>
+      <button type="button" class="drawer-close" id="drawerClose" aria-label="Close" data-i18n-label="Close">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <nav class="drawer-nav" id="drawerNav"></nav>
+  </aside>
   <div id="banner"></div>
   <main id="app">
     <noscript>

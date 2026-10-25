@@ -534,5 +534,8 @@ I18N.dict.uk = {
   "New players are always welcome. No experience is needed: the game master explains the rules before the game.": "Нові гравці завжди бажані. Досвід не потрібен: ведучий пояснює правила перед грою.",
   "See the stats": "Дивитися статистику",
   "All games": "Усі ігри",
-  "Mafia in Barcelona": "Мафія в Барселоні"
+  "Mafia in Barcelona": "Мафія в Барселоні",
+  "Menu": "Меню",
+  "Close": "Закрити",
+  "Write to the game master in Telegram": "Написати ведучому в Telegram"
 };

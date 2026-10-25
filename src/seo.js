@@ -5,8 +5,9 @@
      <!-- seo --> and <!-- /seo --> with the page's own title, description, canonical address,
      language alternates (uk = default address, en = ?lang=en) and Open Graph tags
      (the preview card in Telegram / WhatsApp / Google).
-   - /sitemap.xml lists the public pages (built from the public data copy in KV).
-   - Admin and private pages get "noindex".
+   - Only the home page (dashboard) and /about are offered to search engines (sitemap + index).
+     Every other page (games, players, compare, admin) gets "noindex": it still has a proper title and
+     link preview for Telegram, but people's pages don't turn up in Google searches.
    ============================================================ */
 
 const T = {
@@ -33,7 +34,7 @@ const T = {
     locale: 'en_GB',
   },
 };
-const PRIVATE = /^\/(data|settings|bot|me|login-error|game\/new)(\/|$)/;
+const INDEXED = /^\/(dashboard|about)?$/;   // everything else: noindex
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fill = (s, v) => s.replace(/\{(\w+)\}/g, (m, k) => (k in v ? v[k] : m));
 
@@ -75,7 +76,7 @@ export async function seoPage(request, env, url, snapshotKey) {
   const tags = [
     `<title>${esc(title)}</title>`,
     `<meta name="description" content="${esc(desc)}">`,
-    PRIVATE.test(path) ? '<meta name="robots" content="noindex">' : `<link rel="canonical" href="${esc(self)}">`,
+    INDEXED.test(path) ? `<link rel="canonical" href="${esc(path === '/dashboard' ? (lang === 'en' ? `${site}/?lang=en` : `${site}/`) : self)}">` : '<meta name="robots" content="noindex, follow">',
     `<link rel="alternate" hreflang="uk" href="${esc(ukUrl)}">`,
     `<link rel="alternate" hreflang="en" href="${esc(enUrl)}">`,
     `<link rel="alternate" hreflang="x-default" href="${esc(ukUrl)}">`,
@@ -103,17 +104,12 @@ export async function seoPage(request, env, url, snapshotKey) {
   return new Response(out, { status: 200, headers });
 }
 
-/** /sitemap.xml: main pages, every player and every game, each in Ukrainian and English. */
+/** /sitemap.xml: the home page and /about, each in Ukrainian and English. */
 export async function sitemap(env, url, snapshotKey) {
   const site = (env.SITE_URL || url.origin).replace(/\/$/, '');
-  const data = (await publicData(env, snapshotKey)) || { players: [], games: [] };
+  const data = (await publicData(env, snapshotKey)) || { games: [] };
   const lastGame = (data.games || []).reduce((d, g) => (g.date > d ? g.date : d), '');
-  const pages = [
-    { path: '/', mod: lastGame, pr: '1.0' }, { path: '/games', mod: lastGame, pr: '0.8' }, { path: '/players', mod: lastGame, pr: '0.8' },
-    { path: '/compare', pr: '0.5' }, { path: '/about', pr: '0.7' },
-    ...(data.players || []).map(p => ({ path: `/player/${p.number}`, pr: '0.6' })),
-    ...(data.games || []).filter(g => g.date && g.number && g.winner).map(g => ({ path: `/game/${g.date.split('-').reverse().join('-')}/${g.number}`, mod: g.date, pr: '0.4' })),
-  ];
+  const pages = [{ path: '/', mod: lastGame, pr: '1.0' }, { path: '/about', pr: '0.8' }];
   const entry = ({ path, mod, pr }) => {
     const uk = site + path, en = `${site}${path}?lang=en`;
     const alt = `<xhtml:link rel="alternate" hreflang="uk" href="${esc(uk)}"/><xhtml:link rel="alternate" hreflang="en" href="${esc(en)}"/>`;

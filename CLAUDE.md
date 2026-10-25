@@ -49,14 +49,16 @@ Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (do
 - Linking: the admin enters a player's Telegram @username, and the player is linked on first login. The admin can also link a login by hand.
 - First login (site or bot Start) sends admins a Telegram notice: "✅ … linked automatically to <player>" (matched the pre-filled @username) or "🆕 … not linked yet" with a link to /players. Matching order: known Telegram id → pre-filled @username → new pending account. The admin can also store a Telegram ID in advance (accounts row with provider_uid + player_id, e.g. from a Telegram Desktop group export): the first login/Start then sends "✅ … (за Telegram ID)". Players page chips: green = connected, plain = ID known (waiting), grey = @username waiting.
 - Public pages show only the dashboard, games and player stats, by nickname.
+- The "Admin mode" banner shows only on game pages (where games are edited).
+- **Phones (≤760px):** the menu and login move into a side panel opened by the burger button right of UA/EN: login info + Log out (or the login button) on top, then the menu items and "About". It closes on a link, ✕, the dark backdrop or Esc.
 - **Compare** (`/compare/<No.>/<No.>`, menu "Порівняння", also "⇄ Compare" on every player page): two players side by side (rating, place, games, win %, ± exp., alive, each role, game facts, titles); green = better in that row, rows like games/shot are neutral. Default: you vs the top player (the 2nd if you are the top); visitors see #1 vs #2. Picking the other side's player swaps them. Only two players for now; no head-to-head (pair stats were dropped).
 
 ## Search engines & link previews (open for indexing, Oct 2026)
 - `public/robots.txt`: everything allowed except `/api/`; points to the sitemap.
-- `/sitemap.xml` is built by the Worker (`src/seo.js`) from the KV public copy: home, games, players, compare, about, every player and every finished game, each in uk and en.
-- Every page is index.html; the Worker fills the `<!-- seo -->…<!-- /seo -->` block per page: title, description, canonical, hreflang (uk = plain address, en = `?lang=en`), Open Graph (logo `android-chrome-512x512.png`) and JSON-LD on the home page. Player pages use the nick from the KV copy. Admin/private pages (`/data`, `/settings`, `/bot`, `/me`, `/game/new`) get `noindex`.
+- **Only the home page and `/about` are indexed** (decided Oct 2026, privacy): `/sitemap.xml` (Worker, `src/seo.js`) lists just those two, in uk and en. Every other page gets `noindex, follow` but keeps its own title and link preview for Telegram.
+- Every page is index.html; the Worker fills the `<!-- seo -->…<!-- /seo -->` block per page: title, description, canonical, hreflang (uk = plain address, en = `?lang=en`), Open Graph (logo `android-chrome-512x512.png`) and JSON-LD on the home page. Player pages use the nick from the KV copy (for the preview).
 - `?lang=en|uk` in the address sets the site language (and is removed when the visitor switches language).
-- `/about` ("Про Mafia BCN", footer link): who we are, how the game works, roles, what the site shows, "want to play?" (no contact yet). Visitors also see a one-line intro with a link on the dashboard.
+- `/about` ("Про Mafia BCN", footer link): who we are, how the game works, roles, what the site shows, "want to play?" with a "Write to the game master in Telegram" button (t.me/voorest). Visitors also see a one-line intro with a link on the dashboard.
 - Google Search Console: the owner verifies the domain himself (Cloudflare one-click), then submits `https://mafiabcn.com/sitemap.xml`.
 
 ## Login

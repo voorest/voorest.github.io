@@ -1,5 +1,5 @@
 # Mafia BCN — https://mafiabcn.com
-# Public pages (dashboard, games, players, compare, about) may be indexed.
+# Search engines may index the home page and /about (see the sitemap); other pages say "noindex" themselves.
 # The API (data, login, admin) is not for search engines.
 User-agent: *
 Allow: /
