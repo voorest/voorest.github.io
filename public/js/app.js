@@ -208,7 +208,7 @@ function authHtml() {
     return `<span class="who">${me ? avatar(me) : ''}<span>${h(u.nickname || (u.username ? '@' + u.username : u.name || t('you')))}</span>${u.role === 'admin' ? ` <span class="chip admin">${t('admin')}</span>` : ''}</span>
       <button class="btn small ghost logout-btn">${t('Log out')}</button>`;
   }
-  if (Store.devLogin()) return `<a class="btn small" href="/api/auth/dev-login">${t('Dev login (local admin)')}</a>`;
+  if (Store.devLogin()) return `<a class="btn small" href="/api/auth/dev-login">${t('Dev login')}</a>`;
   if (Store.loginAvailable()) return `<a class="btn small tg" href="/api/auth/telegram/start?back=${encodeURIComponent(location.pathname)}">${t('Log in with Telegram')}</a>`;
   return '';
 }
@@ -1219,7 +1219,7 @@ function viewAbout() {
         ${roleLine('citizen', t('finds the mafia by talking and voting.'))}
         ${roleLine('sheriff', t('checks one player every night: mafia or not.'))}
         ${roleLine('doctor', t('heals one player every night and can save them from a shot.'))}
-        ${roleLine('maniac', t('shoots on his own at night, but plays on the citizens’ side.'))}
+        ${roleLine('maniac', t('can shoot anyone at night, but plays for the citizens, so the best target is the mafia.'))}
         ${roleLine('mafia', t('shoots one player every night and wins by numbers.'))}
         ${roleLine('don', t('leads the mafia and looks for the sheriff at night.'))}
       </ul>

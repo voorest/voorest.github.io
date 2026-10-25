@@ -24,7 +24,7 @@ Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (do
 - When adding a text: wrap it in `t()` and add its Ukrainian line to `uk.js`. Server error messages pass through `t()` too, so common ones are in `uk.js`.
 
 ## Local development
-`npm run seed:local` (copies the newest `data/mafia-bcn-backup-*.json` into the local D1; without a backup it reloads `data/import.sql`; both empty the tables first, so it can be run again), then `npm run dev`. On localhost with `DEV_LOGIN=true` in `.dev.vars` there is a "Dev login (local admin)" button. It is disabled in production (needs both the var and the localhost hostname).
+`npm run seed:local` (copies the newest `data/mafia-bcn-backup-*.json` into the local D1; without a backup it reloads `data/import.sql`; both empty the tables first, so it can be run again), then `npm run dev`. On localhost with `DEV_LOGIN=true` in `.dev.vars` there is a "Dev login" button ("Вхід (розробка)"). It is disabled in production (needs both the var and the localhost hostname).
 
 ## Game rules as modelled
 - Roles: citizen (МИР), sheriff (Ш), doctor (ЛІК), **maniac (МАН) = citizens' team**, mafia (М), don (ДМ).
