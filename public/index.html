@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="uk">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -16,16 +16,18 @@
   <header class="topbar">
     <a class="brand" href="/dashboard"><img class="logo" src="/images/logo.png" width="34" height="34" alt=""><span>Mafia <b>BCN</b></span></a>
     <nav id="nav">
-      <a href="/dashboard" data-route="dashboard">Dashboard</a>
-      <a href="/games" data-route="games">Games</a>
-      <a href="/players" data-route="players">Players</a>
-      <a href="/data" data-route="data" data-admin hidden>Data</a>
-      <a href="/settings" data-route="settings" data-admin hidden>Settings</a>
-      <a href="/bot" data-route="bot" data-admin-live hidden>Bot</a>
-      <a href="/me" data-route="me" id="navMe" hidden>My stats</a>
+      <a href="/dashboard" data-route="dashboard" data-i18n="Dashboard">Dashboard</a>
+      <a href="/games" data-route="games" data-i18n="Games">Games</a>
+      <a href="/players" data-route="players" data-i18n="Players">Players</a>
+      <a href="/compare" data-route="compare" data-i18n="Compare">Compare</a>
+      <a href="/data" data-route="data" data-admin hidden data-i18n="Data">Data</a>
+      <a href="/settings" data-route="settings" data-admin hidden data-i18n="Settings">Settings</a>
+      <a href="/bot" data-route="bot" data-admin-live hidden data-i18n="Bot">Bot</a>
+      <a href="/me" data-route="me" id="navMe" hidden data-i18n="My stats">My stats</a>
     </nav>
     <div class="spacer"></div>
     <span id="saveState" class="save-state" aria-live="polite"></span>
+    <div class="lang-switch" role="group" aria-label="Language"><button type="button" data-lang="uk">UA</button><button type="button" data-lang="en">EN</button></div>
     <div id="auth" class="auth"></div>
   </header>
   <div id="banner"></div>
@@ -33,6 +35,8 @@
   <div id="toast" role="status" aria-live="polite"></div>
 
   <!-- Plain scripts (no build step) so the site also works by double-clicking index.html -->
+  <script src="/js/i18n.js"></script>
+  <script src="/js/lang/uk.js"></script>
   <script src="/js/data.js"></script>
   <script src="/js/stats.js"></script>
   <script src="/js/demo.js"></script>

@@ -55,7 +55,7 @@ async function api(path, { method = 'GET', body } = {}) {
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) throw new Error(data.error || t('Request failed ({n})', { n: res.status }));
   return data;
 }
 
@@ -197,7 +197,7 @@ const Store = (() => {
     if (mode !== 'local') return true;
     db.updatedAt = new Date().toISOString();
     try { localStorage.setItem(KEY, JSON.stringify(db)); return true; }
-    catch (e) { console.error(e); alert('Could not save to browser storage: ' + e.message); return false; }
+    catch (e) { console.error(e); alert(t('Could not save to browser storage: {msg}', { msg: e.message })); return false; }
   }
 
   const get = () => db;
@@ -237,7 +237,7 @@ const Store = (() => {
   /** Nicks are unique (ignoring case): a taken one is refused with a clear message. */
   function nickFree(nickname, exceptId) {
     const other = db.players.find(p => p.id !== String(exceptId) && p.nickname.toLowerCase() === nickname.toLowerCase());
-    if (other) throw new Error(`The nick "${nickname}" is already taken (${fullName(other)}). Please choose another one.`);
+    if (other) throw new Error(t('The nick “{nick}” is already taken ({who}). Please choose another one.', { nick: nickname, who: fullName(other) }));
   }
   async function updatePlayer(id, patch) {
     const p = player(id);
@@ -265,8 +265,8 @@ const Store = (() => {
     await loadAdmin();
   }
   const player = id => db.players.find(p => p.id === String(id));
-  const playerName = id => (player(id) ? fullName(player(id)) : '(unknown)');   // "Tania Tianaboa"
-  const playerNick = id => (player(id) || {}).nickname || '(unknown)';           // "Tianaboa" (public rankings)
+  const playerName = id => (player(id) ? fullName(player(id)) : t('(unknown)'));   // "Tania Tianaboa"
+  const playerNick = id => (player(id) || {}).nickname || t('(unknown)');           // "Tianaboa" (public rankings)
 
   /* ---------- your own details and photos ---------- */
   const setAv = (pid, av) => { const p = player(pid); if (p) { p.av = av || 0; saveLocal(); } };
@@ -451,15 +451,15 @@ const GameLogic = {
     const { alive } = this.timeline(game);
     const mafia = alive.filter(n => this.teamOf(game, n) === 'mafia').length;
     const town = alive.length - mafia;
-    if (mafia === 0) return { winner: 'town', reason: 'no mafia left' };
-    if (mafia >= town) return { winner: 'mafia', reason: `${mafia} mafia vs ${town} citizen${town === 1 ? '' : 's'}` };
+    if (mafia === 0) return { winner: 'town', reason: t('no mafia left') };
+    if (mafia >= town) return { winner: 'mafia', reason: t('{m} mafia vs {c} citizens', { m: mafia, c: town }) };
     // After the day only a night is left: the mafia shoots one more citizen. If that makes it even
     // and nobody can stop it (no doctor to heal, no maniac to shoot back), the game is already decided.
     const last = game.rounds[game.rounds.length - 1];
     const dayDone = (last.nominations || []).length || (last.eliminated || []).length || (last.removed || []).length;
     const aliveRole = r => alive.some(n => (game.seats.find(s => s.seat === n) || {}).role === r);
     if (dayDone && mafia >= town - 1 && !aliveRole('doctor') && !aliveRole('maniac')) {
-      return { winner: 'mafia', reason: `${mafia} mafia vs ${town} citizens after the day: the night shot makes it ${mafia} vs ${town - 1}, and there is no doctor or maniac to stop it` };
+      return { winner: 'mafia', reason: t('{m} mafia vs {c} citizens after the day: the night shot makes it {m} vs {c1}, and there is no doctor or maniac to stop it', { m: mafia, c: town, c1: town - 1 }) };
     }
     return null;
   },
@@ -468,31 +468,31 @@ const GameLogic = {
   validate(game) {
     const w = [];
     const empty = game.seats.filter(s => !s.playerId).length;
-    if (empty) w.push(`${empty} seat(s) without a player`);
+    if (empty) w.push(t('{n} seat(s) without a player', { n: empty }));
     const ids = game.seats.map(s => s.playerId).filter(Boolean);
     const dup = [...new Set(ids.filter((x, i) => ids.indexOf(x) !== i))];
-    if (dup.length) w.push(`Same player in more than one seat: ${dup.map(Store.playerName).join(', ')}`);
+    if (dup.length) w.push(t('Same player in more than one seat: {names}', { names: dup.map(Store.playerName).join(', ') }));
     const noRole = game.seats.filter(s => !s.role).length;
-    if (noRole) w.push(`${noRole} seat(s) without a role`);
+    if (noRole) w.push(t('{n} seat(s) without a role', { n: noRole }));
     const c = this.roleCounts(game);
-    if (!noRole && c.don + c.mafia === 0) w.push('No mafia in this game?');
+    if (!noRole && c.don + c.mafia === 0) w.push(t('No mafia in this game?'));
     // consistency checks (useful for imported games)
     const tl = this.timeline(game);
     game.rounds.forEach((r, i) => {
-      (r.eliminated || []).forEach(s => { if (tl.alive.includes(s)) w.push(`Seat ${s} is voted out on day ${i + 1} but marked alive at the end`); });
+      (r.eliminated || []).forEach(s => { if (tl.alive.includes(s)) w.push(t('Seat {s} is voted out on day {d} but marked alive at the end', { s, d: i + 1 })); });
       const dayAlive = (tl.phases.find(p => p.round === i + 1 && p.phase === 'day') || { alive: [] }).alive;
-      (r.nominations || []).forEach(n => { if (n.by && !dayAlive.includes(n.by)) w.push(`Day ${i + 1}: seat ${n.by} nominates but was already out`); });
+      (r.nominations || []).forEach(n => { if (n.by && !dayAlive.includes(n.by)) w.push(t('Day {d}: seat {s} nominates but was already out', { d: i + 1, s: n.by })); });
       const nightAlive = (tl.phases.find(p => p.round === i + 1 && p.phase === 'night') || { alive: [] }).alive;
-      const names = { mafiaKill: 'mafia shot', donCheck: 'don check', sheriffCheck: 'sheriff check', maniacKill: 'maniac shot', doctorHeal: 'doctor heal' };
+      const names = { mafiaKill: t('mafia shot'), donCheck: t('don check'), sheriffCheck: t('sheriff check'), maniacKill: t('maniac shot'), doctorHeal: t('doctor heal') };
       Object.keys(names).forEach(f => {
-        if (r.night && r.night[f] && !this.canAct(game, f, nightAlive)) w.push(`Night ${i + 1}: ${names[f]} is recorded, but that role is already out (it is ignored)`);
+        if (r.night && r.night[f] && !this.canAct(game, f, nightAlive)) w.push(t('Night {n}: {what} is recorded, but that role is already out (it is ignored)', { n: i + 1, what: names[f] }));
       });
     });
     if (game.winner && !noRole) {
       const mafia = tl.alive.filter(n => this.teamOf(game, n) === 'mafia').length;
       const town = tl.alive.length - mafia;
-      if (game.winner === 'town' && mafia > 0) w.push('Citizens won, but some mafia are marked alive at the end');
-      if (game.winner === 'mafia' && mafia < town) w.push('Mafia won, but fewer mafia than citizens are alive at the end');
+      if (game.winner === 'town' && mafia > 0) w.push(t('Citizens won, but some mafia are marked alive at the end'));
+      if (game.winner === 'mafia' && mafia < town) w.push(t('Mafia won, but fewer mafia than citizens are alive at the end'));
     }
     return w;
   },

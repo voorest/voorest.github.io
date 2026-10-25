@@ -18,7 +18,10 @@ Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (do
 - Bot links use `SITE_URL`.
 
 ## Language
-- The site, code and comments are in English. **Telegram bot messages are in Ukrainian.**
+- Code and comments are in English. **Telegram bot messages are always in Ukrainian.**
+- The site is shown in **Ukrainian by default**, with an **UA / EN** switch in the header (kept per browser in localStorage `mbcn.lang`).
+- How: every visible text in the code is written in English inside `t('…')` (`public/js/i18n.js`); the Ukrainian words are in `public/js/lang/uk.js` (English text → Ukrainian; a missing entry shows in English). Placeholders `{n}`; plural forms via `tn(n, 'game')` (PLURALS in i18n.js, Ukrainian has 3 forms). Role names via `roleLabel(r)`, dates via `locale()`. Menu texts in index.html use `data-i18n`.
+- When adding a text: wrap it in `t()` and add its Ukrainian line to `uk.js`. Server error messages pass through `t()` too, so common ones are in `uk.js`.
 
 ## Local development
 `npm run seed:local` (copies the newest `data/mafia-bcn-backup-*.json` into the local D1; without a backup it reloads `data/import.sql`; both empty the tables first, so it can be run again), then `npm run dev`. On localhost with `DEV_LOGIN=true` in `.dev.vars` there is a "Dev login (local admin)" button. It is disabled in production (needs both the var and the localhost hostname).
@@ -46,6 +49,7 @@ Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (do
 - Linking: the admin enters a player's Telegram @username, and the player is linked on first login. The admin can also link a login by hand.
 - First login (site or bot Start) sends admins a Telegram notice: "✅ … linked automatically to <player>" (matched the pre-filled @username) or "🆕 … not linked yet" with a link to /players. Matching order: known Telegram id → pre-filled @username → new pending account. The admin can also store a Telegram ID in advance (accounts row with provider_uid + player_id, e.g. from a Telegram Desktop group export): the first login/Start then sends "✅ … (за Telegram ID)". Players page chips: green = connected, plain = ID known (waiting), grey = @username waiting.
 - Public pages show only the dashboard, games and player stats, by nickname.
+- **Compare** (`/compare/<No.>/<No.>`, menu "Порівняння", also "⇄ Compare" on every player page): two players side by side (rating, place, games, win %, ± exp., alive, each role, game facts, titles); green = better in that row, rows like games/shot are neutral. Default: you vs the top player (the 2nd if you are the top); visitors see #1 vs #2. Picking the other side's player swaps them. Only two players for now; no head-to-head (pair stats were dropped).
 
 ## Login
 Telegram OpenID Connect (authorization code + PKCE). BotFather → Login Widget:

@@ -137,37 +137,36 @@ const Stats = {
     const T = [];
     const add = (icon, title, desc, p, detail, rule) => T.push({ icon, title, desc, player: p, detail: p ? detail(p) : '', rule });
 
-    add('👑', 'King of the Game', 'Highest rating (win rate that stays fair for players with few games)',
+    add('👑', t('King of the Game'), t('Highest rating (win rate that stays fair for players with few games)'),
       best(P.filter(p => p.games >= minG), p => p.rating, p => p.games),
-      p => `rating ${pct(p.rating)} · ${p.wins}/${p.games} wins`, `min ${minG} games`);
+      p => t('rating {r} · {w}/{g} wins', { r: pct(p.rating), w: p.wins, g: p.games }), t('min {n} games', { n: minG }));
 
     // Role player: good in many roles → average of (role rating − role average) over roles played
-    add('🎭', 'Best Role Player', 'Beats the usual win rate across different roles, on average (3+ roles played)',
+    add('🎭', t('Best Role Player'), t('Beats the usual win rate across different roles, on average (3+ roles played)'),
       best(P.filter(p => ROLE_ORDER.filter(r => p.byRole[r].g).length >= 3),
         p => { const rs = ROLE_ORDER.filter(r => p.byRole[r].g); return rs.reduce((a, r) => a + p.roleRating[r] - st.baseline[r], 0) / rs.length; },
         p => p.games),
-      p => { const rs = ROLE_ORDER.filter(r => p.byRole[r].g); const v = rs.reduce((a, r) => a + p.roleRating[r] - st.baseline[r], 0) / rs.length; return `${Math.abs(Math.round(v * 100))}% ${v >= 0 ? 'above' : 'below'} usual · ${rs.length} roles`; },
-      'played 3+ roles');
+      p => { const rs = ROLE_ORDER.filter(r => p.byRole[r].g); const v = rs.reduce((a, r) => a + p.roleRating[r] - st.baseline[r], 0) / rs.length; return `${t(v >= 0 ? '{p}% above usual' : '{p}% below usual', { p: Math.abs(Math.round(v * 100)) })} · ${tn(rs.length, 'role')}`; },
+      t('played 3+ roles'));
 
     const icons = { sheriff: '⭐', don: '🎩', mafia: '🕶️', citizen: '🏠', doctor: '💊', maniac: '🔪' };
     ['sheriff', 'don', 'mafia', 'citizen', 'doctor', 'maniac'].forEach(r => {
-      const label = ROLES[r].label;
-      add(icons[r], `Best ${label}`, `Best rating as ${label} (usual win rate ${pct(st.baseline[r])})`,
+      add(icons[r], t('Best ' + ROLES[r].label), t('Best rating as {role} (usual win rate {avg})', { role: roleLabel(r), avg: pct(st.baseline[r]) }),
         best(P.filter(p => p.byRole[r].g > 0 && p.byRole[r].w > 0), p => p.roleRating[r], p => p.byRole[r].g),
-        p => `rating ${pct(p.roleRating[r])} · ${p.byRole[r].w}/${p.byRole[r].g} wins`, `a win as ${label}`);
+        p => t('rating {r} · {w}/{g} wins', { r: pct(p.roleRating[r]), w: p.byRole[r].w, g: p.byRole[r].g }), t('a win as {role}', { role: roleLabel(r) }));
     });
 
-    add('🎯', 'Sharp Eye', 'As a citizen, nominates mafia most often',
+    add('🎯', t('Sharp Eye'), t('As a citizen, nominates mafia most often'),
       best(P.filter(p => p.nomsAsTown >= 5), p => this.adjusted(p.nomsOnMafia, p.nomsAsTown, 0.3, st.K), p => p.nomsAsTown),
-      p => `${pct(p.nomAcc)} of ${p.nomsAsTown} nominations`, 'min 5 nominations as citizen');
-    add('🛡️', 'Survivor', 'Most often alive at the end',
+      p => t('{p} of {n}', { p: pct(p.nomAcc), n: tn(p.nomsAsTown, 'nomination') }), t('min 5 nominations as citizen'));
+    add('🛡️', t('Survivor'), t('Most often alive at the end'),
       best(P.filter(p => p.survived > 0), p => p.survived, p => p.survived / p.games),
-      p => `${p.survived} of ${p.games} games`, 'most games survived');
-    add('📅', 'Most Loyal', 'Most games played',
-      best(P, p => p.games, p => p.days), p => `${p.games} games · ${p.days} days`, 'attendance');
-    add('🌙', 'Night Target', 'Shot first at night most often',
+      p => t('{a} of {n}', { a: p.survived, n: tn(p.games, 'game') }), t('most games survived'));
+    add('📅', t('Most Loyal'), t('Most games played'),
+      best(P, p => p.games, p => p.days), p => `${tn(p.games, 'game')} · ${tn(p.days, 'day')}`, t('attendance'));
+    add('🌙', t('Night Target'), t('Shot first at night most often'),
       best(P.filter(p => p.firstKilled > 0), p => p.firstKilled, p => -p.games),
-      p => `${p.firstKilled}× first shot`, 'needs night notes');
+      p => t('{n}× first shot', { n: p.firstKilled }), t('needs night notes'));
     return T;
   },
 };
