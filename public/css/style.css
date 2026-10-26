@@ -463,3 +463,14 @@ body.menu-open { overflow: hidden; }
   .topbar nav, .topbar .auth { display: none; }
   .menu-btn { display: block; }
 }
+
+/* Scrollbars: dark, but clearly visible (wide tables like the leaderboard scroll sideways) */
+:root { color-scheme: dark; }   /* dark default scrollbars and form controls everywhere */
+.table-wrap { scrollbar-width: thin; scrollbar-color: #5a616b var(--surface-2); padding-bottom: 2px; }
+.table-wrap:hover { scrollbar-color: var(--accent) var(--surface-2); }
+@supports not (scrollbar-color: auto) {   /* Safari */
+  .table-wrap::-webkit-scrollbar { height: 10px; }
+  .table-wrap::-webkit-scrollbar-track { background: var(--surface-2); border-radius: 5px; }
+  .table-wrap::-webkit-scrollbar-thumb { background: #5a616b; border-radius: 5px; border: 2px solid var(--surface-2); }
+  .table-wrap:hover::-webkit-scrollbar-thumb { background: var(--accent); }
+}
