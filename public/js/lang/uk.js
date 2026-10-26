@@ -81,7 +81,6 @@ I18N.dict.uk = {
   "Rating": "Рейтинг",
   "Win rate adjusted for number of games (see the note below the table)": "Відсоток перемог з поправкою на кількість ігор (див. примітку під таблицею)",
   "Impact": "Вплив",
-  "Wins compared with an average player who got the same roles. +2 = two wins more than usual for those roles, −1 = one fewer.": "Перемоги порівняно з середнім гравцем, який отримав ті самі ролі. +2 = на дві перемоги більше, ніж зазвичай для цих ролей, −1 = на одну менше.",
   "Days": "Дні",
   "Alive": "Вижив",
   "Games alive at the end / games played": "Ігор живим до кінця / зіграно ігор",
@@ -97,7 +96,6 @@ I18N.dict.uk = {
   "Nobody yet": "Поки нікого",
   "Leaderboard": "Таблиця лідерів",
   "<b>#</b> = place in the current sort. <b>Rating</b> = win rate adjusted for number of games: (wins + {k} × {avg}) ÷ (games + {k}), so few games stay close to the average.": "<b>#</b> = місце в поточному сортуванні. <b>Рейтинг</b> = відсоток перемог з поправкою на кількість ігор: (перемоги + {k} × {avg}) ÷ (ігри + {k}), тож при малій кількості ігор він тримається близько до середнього.",
-  "<b>Impact</b> = wins compared with an average player who got the same roles. Some roles win more often than others ({roles}), so we add up the usual chance for every game a player played: <span class=\"pos\">+2</span> means two wins more than usual, <span class=\"neg\">−1</span> one fewer. Role columns: wins/games. Alive: games alive at the end / games. Click a header to sort.": "<b>Вплив</b> = перемоги порівняно з середнім гравцем, який отримав ті самі ролі. Деякі ролі перемагають частіше за інші ({roles}), тож ми додаємо звичайний шанс для кожної гри гравця: <span class=\"pos\">+2</span> — на дві перемоги більше, ніж зазвичай, <span class=\"neg\">−1</span> — на одну менше. Колонки ролей: перемоги/ігри. Вижив: ігор живим до кінця / ігри. Натисніть на заголовок, щоб відсортувати.",
   "Role leaders": "Лідери ролей",
   "Role rating (same adjustment, using each role’s own average).": "Рейтинг у ролі (та сама поправка, але із середнім саме цієї ролі).",
   "Average win rate of this role · games where this role was in play": "Середній відсоток перемог цієї ролі · ігри, де ця роль була",
@@ -308,8 +306,6 @@ I18N.dict.uk = {
   "Maniac kills (on mafia)": "Убивства маніяка (з них мафії)",
   "Rank of {n}": "Місце з {n}",
   "Wins / games": "Перемоги / ігри",
-  "Compared with an average player who got the same roles": "Порівняно з середнім гравцем, який отримав ті самі ролі",
-  "Wins vs usual for these roles": "Перемоги проти звичайного для цих ролей",
   "By role": "За ролями",
   "Bars show the role rating (role average: {roles}).": "Смуги показують рейтинг у ролі (середнє для ролей: {roles}).",
   "How the games went": "Як минали ігри",
@@ -371,7 +367,6 @@ I18N.dict.uk = {
   "<b>Rating</b> = (wins + K × average) ÷ (games + K)": "<b>Рейтинг</b> = (перемоги + K × середнє) ÷ (ігри + K)",
   "Now: K = {k}, average win rate per seat = {avg}. A new player starts at the average; every game moves the rating towards their real win rate. So 8 wins of 10 games ranks higher than 2 of 2.": "Зараз: K = {k}, середній відсоток перемог на місце = {avg}. Новий гравець стартує із середнього; кожна гра наближає рейтинг до його справжнього відсотка перемог. Тож 8 перемог із 10 ігор стоїть вище, ніж 2 з 2.",
   "<b>Role rating</b> — same formula, but with that role’s own average:": "<b>Рейтинг у ролі</b> — та сама формула, але із середнім саме цієї ролі:",
-  "<b>Impact</b> — wins compared with an average player who got the same roles. For every game we take the usual win rate of that role (above) and add them up: that is how many wins an average player would have. +2 = two wins more, −1 = one fewer. A mafia win counts for more, because mafia wins less often.": "<b>Вплив</b> — перемоги порівняно з середнім гравцем, який отримав ті самі ролі. Для кожної гри беремо звичайний відсоток перемог цієї ролі (вище) і додаємо: стільки перемог мав би середній гравець. +2 = на дві перемоги більше, −1 = на одну менше. Перемога за мафію важить більше, бо мафія перемагає рідше.",
   "Save settings?\n\nK = {k}, min games for King = {min}, seats in a new game = {seats}": "Зберегти налаштування?\n\nK = {k}, мінімум ігор для Короля = {min}, місць у новій грі = {seats}",
   "Settings saved": "Налаштування збережено",
   "Loading bot…": "Завантаження бота…",
@@ -540,5 +535,8 @@ I18N.dict.uk = {
   "Write to the game master in Telegram": "Написати ведучому в Telegram",
   "King": "Король",
   "Many roles": "Різні ролі",
-  "Loyal": "Відданий"
+  "Loyal": "Відданий",
+  "How a player wins compared with an average player in the same roles: +2 = two wins more, −1 = one fewer.": "Як гравець перемагає порівняно з середнім гравцем у тих самих ролях: +2 — на дві перемоги більше, −1 — на одну менше.",
+  "<b>Impact</b> = wins compared with an average player in the same roles (+2 = two more, −1 = one fewer). Role columns: wins/games. Alive: games alive at the end / games. Click a header to sort.": "<b>Вплив</b> = перемоги порівняно з середнім гравцем у тих самих ролях (+2 — на дві більше, −1 — на одну менше). Колонки ролей: перемоги/ігри. Вижив: ігор живим до кінця / ігри. Натисніть на заголовок, щоб відсортувати.",
+  "<b>Impact</b> — how a player wins compared with an average player in the same roles: +2 = two wins more, −1 = one fewer.": "<b>Вплив</b> — як гравець перемагає порівняно з середнім гравцем у тих самих ролях: +2 — на дві перемоги більше, −1 — на одну менше."
 };

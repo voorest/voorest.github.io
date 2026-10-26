@@ -336,7 +336,7 @@ const LB_COLS = () => [
   { key: 'wins', label: t('Wins'), get: p => p.wins },
   { key: 'winRate', label: t('Win %'), get: p => p.winRate },
   { key: 'rating', label: t('Rating'), get: p => p.rating, title: t('Win rate adjusted for number of games (see the note below the table)') },
-  { key: 'aboveExpected', label: t('Impact'), get: p => p.aboveExpected, title: t('Wins compared with an average player who got the same roles. +2 = two wins more than usual for those roles, −1 = one fewer.') },
+  { key: 'aboveExpected', label: t('Impact'), get: p => p.aboveExpected, title: t('How a player wins compared with an average player in the same roles: +2 = two wins more, −1 = one fewer.') },
   { key: 'days', label: t('Days'), get: p => p.days },
   ...ROLE_ORDER.map(r => ({ key: r, label: roleLabel(r), get: p => p.roleRating[r] + p.byRole[r].g / 1e4 })),
   { key: 'survived', label: t('Alive'), get: p => (p.games ? p.survived / p.games : 0) + p.survived / 1e4, title: t('Games alive at the end / games played') },
@@ -431,7 +431,7 @@ function viewDashboard() {
         </table>
       </div>
       <p class="muted small">${t('<b>#</b> = place in the current sort. <b>Rating</b> = win rate adjusted for number of games: (wins + {k} × {avg}) ÷ (games + {k}), so few games stay close to the average.', { k: st.K, avg: pct(st.overallRate) })}
-      ${t('<b>Impact</b> = wins compared with an average player who got the same roles. Some roles win more often than others ({roles}), so we add up the usual chance for every game a player played: <span class="pos">+2</span> means two wins more than usual, <span class="neg">−1</span> one fewer. Role columns: wins/games. Alive: games alive at the end / games. Click a header to sort.', { roles: ROLE_ORDER.map(r => `${roleLabel(r)} ${pct(st.baseline[r])}`).join(', ') })}</p>
+      ${t('<b>Impact</b> = wins compared with an average player in the same roles (+2 = two more, −1 = one fewer). Role columns: wins/games. Alive: games alive at the end / games. Click a header to sort.')}</p>
     </section>
 
     <div class="grid-2">
@@ -1159,7 +1159,7 @@ function viewPlayer(id) {
       <div class="kpi"><span class="kpi-val">#${rank}</span><span class="kpi-lbl">${t('Rank of {n}', { n: ranked.length })}</span></div>
       <div class="kpi"><span class="kpi-val">${pct(p.rating)}</span><span class="kpi-lbl">${t('Rating')}</span></div>
       <div class="kpi"><span class="kpi-val">${p.wins}/${p.games}</span><span class="kpi-lbl">${t('Wins / games')} (${pct(p.winRate)})</span></div>
-      <div class="kpi"><span class="kpi-val ${p.aboveExpected >= 0 ? 'pos' : 'neg'}">${signed(p.aboveExpected)}</span><span class="kpi-lbl" title="${t('Wins vs usual for these roles')}: ${t('Compared with an average player who got the same roles')}">${t('Impact')}</span></div>
+      <div class="kpi"><span class="kpi-val ${p.aboveExpected >= 0 ? 'pos' : 'neg'}">${signed(p.aboveExpected)}</span><span class="kpi-lbl" title="${t('How a player wins compared with an average player in the same roles: +2 = two wins more, −1 = one fewer.')}">${t('Impact')}</span></div>
       <div class="kpi"><span class="kpi-val">${p.days}</span><span class="kpi-lbl">${t('Game days')}</span></div>
     </section>
 
@@ -1281,7 +1281,7 @@ function viewCompare(aNo, bNo) {
       row(t('Games'), p => ({ v: p.games, text: p.games }), null),
       row(t('Wins'), p => ({ v: p.wins, text: p.wins }), null),
       row(t('Win %'), p => ({ v: p.winRate, text: pct(p.winRate) })),
-      row(t('Impact'), p => ({ v: p.aboveExpected, text: signed(p.aboveExpected) }), 'high', t('Wins compared with an average player who got the same roles. +2 = two wins more than usual for those roles, −1 = one fewer.')),
+      row(t('Impact'), p => ({ v: p.aboveExpected, text: signed(p.aboveExpected) }), 'high', t('How a player wins compared with an average player in the same roles: +2 = two wins more, −1 = one fewer.')),
       row(t('Game days'), p => ({ v: p.days, text: p.days }), null),
       row(t('Alive at the end'), p => ({ v: rate(p.survived, p.games), text: frac(p.survived, p.games) })),
     ]],
@@ -1503,7 +1503,7 @@ function viewSettings() {
         <p class="muted">${t('Now: K = {k}, average win rate per seat = {avg}. A new player starts at the average; every game moves the rating towards their real win rate. So 8 wins of 10 games ranks higher than 2 of 2.', { k: st.K, avg: pct(st.overallRate) })}</p>
         <p>${t('<b>Role rating</b> — same formula, but with that role’s own average:')}</p>
         <p class="muted">${ROLE_ORDER.map(r => `${roleLabel(r)} ${pct(st.baseline[r])}`).join(' · ')}</p>
-        <p>${t('<b>Impact</b> — wins compared with an average player who got the same roles. For every game we take the usual win rate of that role (above) and add them up: that is how many wins an average player would have. +2 = two wins more, −1 = one fewer. A mafia win counts for more, because mafia wins less often.')}</p>
+        <p>${t('<b>Impact</b> — how a player wins compared with an average player in the same roles: +2 = two wins more, −1 = one fewer.')}</p>
       </section>
     </div>
   `;
