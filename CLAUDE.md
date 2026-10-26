@@ -51,7 +51,9 @@ Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (do
 - Public pages show only the dashboard, games and player stats, by nickname.
 - The "Admin mode" banner shows only on game pages (where games are edited).
 - **Phones (≤760px):** the menu and login move into a side panel opened by the burger button right of UA/EN: login info + Log out (or the login button) on top, then the menu items and "About". It closes on a link, ✕, the dark backdrop or Esc.
-- **Compare** (`/compare/<No.>/<No.>`, menu "Порівняння", also "⇄ Compare" on every player page): two players side by side (rating, place, games, win %, Impact, alive, each role, game facts, titles); green = better in that row, rows like games/shot are neutral. Default: you vs the top player (the 2nd if you are the top); visitors see #1 vs #2. Picking the other side's player swaps them. Only two players for now; no head-to-head (pair stats were dropped).
+- **Compare** (menu "Порівняння", also "⇄ Compare" on every player page): two players side by side (rating, place, games, win %, Impact, alive, each role, game facts, titles); green = better in that row, rows like games/shot are neutral. Default: you vs the top player (the 2nd if you are the top); visitors see #1 vs #2. Picking the other side's player swaps them. Only two players for now; no head-to-head (pair stats were dropped).
+  - Address: plain `/compare` for the default; once a pair is picked it becomes `/compare/<nick>-vs-<nick>` with nick slugs (Latin, lower case, `♀/♂` → `-f/-m`, e.g. `/compare/orsini-f-vs-micro`). A nick with no usable slug, or one shared with another player, uses `p<No.>`. Not places, because places change. Old `/compare/<No.>/<No.>` links are converted. The slug rules are in both `app.js` and `src/seo.js` (keep them the same).
+  - "🔗 Share" button: the phone share sheet on touch devices, otherwise copies the link (`?lang=en` added when the site is in English). Shared links get a Telegram preview title with both nicks.
 
 ## Search engines & link previews (open for indexing, Oct 2026)
 - `public/robots.txt`: everything allowed except `/api/`; points to the sitemap.

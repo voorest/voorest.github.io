@@ -19,6 +19,7 @@ const T = {
     players: ['Гравці — Mafia BCN', 'Гравці Mafia BCN: рейтинг, кількість ігор, перемоги та остання гра кожного.'],
     player: ['{nick} — статистика гравця · Mafia BCN', '{nick}: рейтинг, перемоги, ролі (мирний, шериф, лікар, маніяк, мафія, дон) та історія ігор у Mafia BCN.'],
     compare: ['Порівняння гравців — Mafia BCN', 'Порівняйте статистику двох гравців Mafia BCN: рейтинг, перемоги, ролі та титули.'],
+    pair: ['{a} vs {b} — порівняння гравців · Mafia BCN', 'Хто грає краще: {a} чи {b}? Рейтинг, перемоги, ролі та титули двох гравців Mafia BCN.'],
     about: ['Про Mafia BCN — україномовна Мафія в Барселоні', 'Хто ми, як грається Мафія, які є ролі і що можна знайти на сайті Mafia BCN. Нові гравці завжди бажані.'],
     locale: 'uk_UA',
   },
@@ -30,6 +31,7 @@ const T = {
     players: ['Players — Mafia BCN', 'Mafia BCN players: rating, games played, wins and the last game of each player.'],
     player: ['{nick} — player stats · Mafia BCN', '{nick}: rating, wins, roles (citizen, sheriff, doctor, maniac, mafia, don) and game history at Mafia BCN.'],
     compare: ['Compare players — Mafia BCN', 'Compare the stats of two Mafia BCN players: rating, wins, roles and titles.'],
+    pair: ['{a} vs {b} — player comparison · Mafia BCN', 'Who plays better: {a} or {b}? Rating, wins, roles and titles of two Mafia BCN players.'],
     about: ['About Mafia BCN — Ukrainian-speaking Mafia in Barcelona', 'Who we are, how Mafia is played, which roles there are and what you can find on the Mafia BCN site. New players are always welcome.'],
     locale: 'en_GB',
   },
@@ -37,6 +39,20 @@ const T = {
 const INDEXED = /^\/(dashboard|about)?$/;   // everything else: noindex
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fill = (s, v) => s.replace(/\{(\w+)\}/g, (m, k) => (k in v ? v[k] : m));
+
+/* Same slug rules as compare links in public/js/app.js (nick → "micro", "orsini-f"; empty/numeric/shared → "p<No.>") */
+const SLUG_TR = { а: 'a', б: 'b', в: 'v', г: 'h', ґ: 'g', д: 'd', е: 'e', є: 'ie', ж: 'zh', з: 'z', и: 'y', і: 'i', ї: 'i', й: 'i', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'kh', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'shch', ь: '', ю: 'iu', я: 'ia', ы: 'y', э: 'e', ё: 'io', ъ: '', "'": '', '’': '' };
+const slugify = s => String(s || '').toLowerCase().replace(/♀/g, ' f').replace(/♂/g, ' m').replace(/./gu, c => SLUG_TR[c] ?? c)
+  .normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+function findBySlug(players, key) {
+  key = String(key).toLowerCase();
+  if (/^\d+$/.test(key)) return players.find(p => String(p.number) === key) || null;
+  const raw = players.map(p => [p, slugify(p.nickname)]);
+  const count = {};
+  raw.forEach(([, s]) => { count[s] = (count[s] || 0) + 1; });
+  const hit = raw.find(([p, s]) => (s && !/^\d+$/.test(s) && count[s] === 1 ? s : `p${p.number}`) === key);
+  return hit ? hit[0] : null;
+}
 
 async function publicData(env, key) {
   try { const v = env.KV ? await env.KV.get(key) : null; return v ? JSON.parse(v) : null; } catch { return null; }
@@ -55,6 +71,12 @@ async function pageMeta(env, path, lang, snapshotKey) {
     const p = data && (data.players || []).find(x => String(x.number) === m[1]);
     if (p) { const v = { nick: p.nickname }; return [fill(L.player[0], v), fill(L.player[1], v)]; }
     return L.players;
+  }
+  if ((m = path.match(/^\/compare\/([^/]+?)-vs-([^/]+)$/))) {
+    // shared links (Share button) show both nicks in the Telegram preview
+    const data = await publicData(env, snapshotKey);
+    const a = data && findBySlug(data.players || [], decodeURIComponent(m[1])), b = data && findBySlug(data.players || [], decodeURIComponent(m[2]));
+    if (a && b) { const v = { a: a.nickname, b: b.nickname }; return [fill(L.pair[0], v), fill(L.pair[1], v)]; }
   }
   if (path.startsWith('/compare')) return L.compare;
   const key = { '/': 'home', '/dashboard': 'home', '/games': 'games', '/players': 'players', '/about': 'about' }[path];

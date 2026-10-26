@@ -1247,26 +1247,43 @@ function viewAbout() {
 const rankedPlayers = st => [...st.players].sort((a, b) => b.rating - a.rating || b.games - a.games);
 /** The usual opponent for someone: the top player, or the 2nd when they are the top themselves. */
 function defaultRival(ranked, id) { return ranked.find(p => p.id !== id) || null; }
+/* Readable compare links: /compare/micro-vs-undefined (nicks as slugs; the same rules live in src/seo.js).
+   Old links with player numbers (/compare/6/25) still work. */
+const SLUG_TR = { а: 'a', б: 'b', в: 'v', г: 'h', ґ: 'g', д: 'd', е: 'e', є: 'ie', ж: 'zh', з: 'z', и: 'y', і: 'i', ї: 'i', й: 'i', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'kh', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'shch', ь: '', ю: 'iu', я: 'ia', ы: 'y', э: 'e', ё: 'io', ъ: '', "'": '', '’': '' };
+const slugify = s => String(s || '').toLowerCase().replace(/♀/g, ' f').replace(/♂/g, ' m').replace(/./gu, c => SLUG_TR[c] ?? c)
+  .normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+/** Slug of every player; an empty, numeric or shared slug falls back to "p<No.>" so each one is unique. */
+function playerSlugs() {
+  const raw = Store.get().players.map(p => [p, slugify(p.nickname)]);
+  const count = {};
+  raw.forEach(([, s]) => { count[s] = (count[s] || 0) + 1; });
+  return new Map(raw.map(([p, s]) => [p.id, s && !/^\d+$/.test(s) && count[s] === 1 ? s : `p${p.number}`]));
+}
+const playerSlug = p => playerSlugs().get(p.id);
+const comparePath = (a, b) => `/compare/${playerSlug(a)}-vs-${playerSlug(b)}`;
 /** Link from a player page: you vs this player when you are logged in as someone else, otherwise this player vs the top. */
 function compareHref(p0) {
   const u = Store.user();
   const me = u && u.playerId && u.playerId !== p0.id ? Store.player(u.playerId) : null;
-  return me ? `/compare/${me.number}/${p0.number}` : `/compare/${p0.number}`;
+  return me ? comparePath(me, p0) : `/compare/${playerSlug(p0)}`;
 }
 
-function viewCompare(aNo, bNo) {
+function viewCompare(arg1, arg2) {
   const db = Store.get();
   const st = Stats.compute(db);
   const ranked = rankedPlayers(st);
   if (ranked.length < 2) { $app.innerHTML = `<div class="empty">${t('At least two players with finished games are needed to compare.')}</div>`; return; }
-  const byNo = no => ranked.find(p => String(p.number) === String(no)) || null;
+  // "micro-vs-undefined", "micro" (vs the default rival), or old numbers "6", "25"
+  const slugs = playerSlugs();
+  const [aKey, bKey] = arg1 && arg1.includes('-vs-') ? arg1.split('-vs-') : [arg1, arg2];
+  const find = key => (!key ? null : ranked.find(p => (/^\d+$/.test(key) ? String(p.number) === key : slugs.get(p.id) === key.toLowerCase())) || null);
   const u = Store.user();
   const me = u && u.playerId ? ranked.find(p => p.id === u.playerId) : null;
-  let A = byNo(aNo), B = byNo(bNo);
+  let A = find(aKey), B = find(bKey);
   if (!A) A = me || ranked[0];
   if (!B || B.id === A.id) B = defaultRival(ranked, A.id);
-  const want = `/compare/${A.number}/${B.number}`;
-  if (location.pathname !== want) { history.replaceState(null, '', want); currentPath = want; }
+  // The plain /compare address stays clean; a chosen pair shows as readable nicks
+  if (arg1) { const want = comparePath(A, B); if (location.pathname !== want) { history.replaceState(null, '', want); currentPath = want; } }
 
   const place = p => ranked.findIndex(x => x.id === p.id) + 1;
   const titles = Stats.titles(st, db.settings);
@@ -1325,7 +1342,8 @@ function viewCompare(aNo, bNo) {
     : t('{name} is ahead in {n} of {m} rows', { name: h((leadA > leadB ? A : B).nick), n: Math.max(leadA, leadB), m: leadA + leadB });
 
   $app.innerHTML = `
-    <div class="page-head"><h1>${t('Compare players')}</h1></div>
+    <div class="page-head"><h1>${t('Compare players')}</h1>
+      <button class="btn small" id="cmpShare" title="${t('Send a link to this comparison')}">🔗 ${t('Share')}</button></div>
     <section class="cmp-head">
       ${card(A, 'a')}
       <button class="btn ghost cmp-swap" id="cmpSwap" title="${t('Swap')}" aria-label="${t('Swap')}">⇄</button>
@@ -1346,13 +1364,24 @@ function viewCompare(aNo, bNo) {
       </section>`).join('')}
     <p class="muted small">${t('Green = better in that row. Rows without green are just facts (more games or being shot is not better or worse).')}</p>
   `;
-  const goPair = (a, b) => { const path = `/compare/${a}/${b}`; history.replaceState(null, '', path); currentPath = path; viewCompare(a, b); };
+  const byNo = no => ranked.find(p => String(p.number) === String(no));
+  const goPair = (a, b) => { const path = comparePath(a, b); history.replaceState(null, '', path); currentPath = path; viewCompare(path.slice(9)); };
   $$('.cmp-select').forEach(s => s.onchange = () => {
-    let a = s.dataset.side === 'a' ? s.value : A.number, b = s.dataset.side === 'b' ? s.value : B.number;
-    if (String(a) === String(b)) { if (s.dataset.side === 'a') b = A.number; else a = B.number; }   // picking the other side's player swaps them
+    let a = s.dataset.side === 'a' ? byNo(s.value) : A, b = s.dataset.side === 'b' ? byNo(s.value) : B;
+    if (a.id === b.id) { if (s.dataset.side === 'a') b = A; else a = B; }   // picking the other side's player swaps them
     goPair(a, b);
   });
-  $('#cmpSwap').onclick = () => goPair(B.number, A.number);
+  $('#cmpSwap').onclick = () => goPair(B, A);
+  // Share: the phone's share sheet, or copy the link on a computer
+  $('#cmpShare').onclick = async () => {
+    const url = location.origin + comparePath(A, B) + (I18N.lang === 'en' ? '?lang=en' : '');
+    const title = `${A.nick} vs ${B.nick} — Mafia BCN`;
+    if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+      try { await navigator.share({ title, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    }
+    try { await navigator.clipboard.writeText(url); toast(t('Link copied: {url}', { url })); }
+    catch { toast(url); }
+  };
 }
 
 /* ============================================================

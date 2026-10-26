@@ -538,5 +538,8 @@ I18N.dict.uk = {
   "Loyal": "Відданий",
   "How a player wins compared with an average player in the same roles: +2 = two wins more, −1 = one fewer.": "Як гравець перемагає порівняно з середнім гравцем у тих самих ролях: +2 — на дві перемоги більше, −1 — на одну менше.",
   "<b>Impact</b> = wins compared with an average player in the same roles (+2 = two more, −1 = one fewer). Role columns: wins/games. Alive: games alive at the end / games. Click a header to sort.": "<b>Вплив</b> = перемоги порівняно з середнім гравцем у тих самих ролях (+2 — на дві більше, −1 — на одну менше). Колонки ролей: перемоги/ігри. Вижив: ігор живим до кінця / ігри. Натисніть на заголовок, щоб відсортувати.",
-  "<b>Impact</b> — how a player wins compared with an average player in the same roles: +2 = two wins more, −1 = one fewer.": "<b>Вплив</b> — як гравець перемагає порівняно з середнім гравцем у тих самих ролях: +2 — на дві перемоги більше, −1 — на одну менше."
+  "<b>Impact</b> — how a player wins compared with an average player in the same roles: +2 = two wins more, −1 = one fewer.": "<b>Вплив</b> — як гравець перемагає порівняно з середнім гравцем у тих самих ролях: +2 — на дві перемоги більше, −1 — на одну менше.",
+  "Share": "Поділитися",
+  "Send a link to this comparison": "Надіслати посилання на це порівняння",
+  "Link copied: {url}": "Посилання скопійовано: {url}"
 };
