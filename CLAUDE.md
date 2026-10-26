@@ -51,7 +51,7 @@ Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (do
 - Public pages show only the dashboard, games and player stats, by nickname.
 - The "Admin mode" banner shows only on game pages (where games are edited).
 - **Phones (≤760px):** the menu and login move into a side panel opened by the burger button right of UA/EN: login info + Log out (or the login button) on top, then the menu items and "About". It closes on a link, ✕, the dark backdrop or Esc.
-- **Compare** (`/compare/<No.>/<No.>`, menu "Порівняння", also "⇄ Compare" on every player page): two players side by side (rating, place, games, win %, ± exp., alive, each role, game facts, titles); green = better in that row, rows like games/shot are neutral. Default: you vs the top player (the 2nd if you are the top); visitors see #1 vs #2. Picking the other side's player swaps them. Only two players for now; no head-to-head (pair stats were dropped).
+- **Compare** (`/compare/<No.>/<No.>`, menu "Порівняння", also "⇄ Compare" on every player page): two players side by side (rating, place, games, win %, Impact, alive, each role, game facts, titles); green = better in that row, rows like games/shot are neutral. Default: you vs the top player (the 2nd if you are the top); visitors see #1 vs #2. Picking the other side's player swaps them. Only two players for now; no head-to-head (pair stats were dropped).
 
 ## Search engines & link previews (open for indexing, Oct 2026)
 - `public/robots.txt`: everything allowed except `/api/`; points to the sitemap.
@@ -103,7 +103,7 @@ Sessions are stored in D1 as SHA-256 hashes; the cookie is HttpOnly.
 ## Ratings (fair comparison, may be tuned)
 - `rating = (wins + K·avg) / (games + K)`, K = 5 (Settings).
 - Role ratings use each role's own average.
-- "± exp." (Ukrainian label "Понад норму") = wins minus the wins expected from the roles a player received.
+- **Impact** ("Вплив", was "± exp.") = wins minus the wins expected from the roles a player received.
 - Titles: King (best rating, min games), Best Role Player (above average in 3+ roles), Best Sheriff/Don/Mafia/Citizen/Doctor/Maniac, Sharp Eye, Survivor, Most Loyal, Night Target.
 
 ## Day stats post (template built; topic + hidden links still to do)
