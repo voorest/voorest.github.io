@@ -79,6 +79,10 @@ Sessions are stored in D1 as SHA-256 hashes; the cookie is HttpOnly.
 
 ## Saving & editing
 - The admin edits on the live site. **Game edits are a draft** (a new game too, see above): a "Save changes" bar with a confirm dialog that lists the changes. Leaving the page with unsaved changes asks first.
+- Game editor shortcuts (Oct 2026):
+  - **Quick add** above the seats has the same 3 fields as the Players page (name, nick, gender); the new player takes the first empty seat. An empty nick falls back to the name.
+  - **Role picker** shows the 3-letter code first: МИР, ШЕР, ЛІК, МАН, МАФ, ДОН (`ROLES[r].code`, English CIT/SHR/DOC/MAN/MAF/DON translated in uk.js). Our own type-to-pick on the player and role pickers: letters typed quickly match the start of any word, in Ukrainian or English ("ми" → МИР, "sh" → Sheriff); the same letter again goes to the next match. A keyboard pick is applied at once and the page is re-drawn on Enter (focus moves to the same picker one seat down) or when leaving the picker. A mouse pick re-draws at once.
+  - **"⌨ As text"** in each round's day: a textarea with one nomination per line `who-whom-votes` (`2-5-1`; any non-digit separates; `0-5-3` = revote row with empty "who"). Every edit replaces the round's nominations; the seat that clearly got the most votes in the last vote (the revote rows if there are any) is ticked as voted out; on a tie the admin picks (an auto-ticked seat is unticked). Editing the nomination rows by hand closes the box. Revote logic may still change.
 - Writes need JSON plus a same-origin check. Every successful admin write rebuilds the KV public copy.
 
 ## Free-limit protection (decided Oct 2026)

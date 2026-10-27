@@ -8,13 +8,14 @@
    ============================================================ */
 'use strict';
 
+/* short = spreadsheet notation; code = 3 letters shown first in the role picker, so typing the first letter finds the role */
 const ROLES = {
-  citizen: { label: 'Citizen', short: 'МИР', team: 'town' },
-  sheriff: { label: 'Sheriff', short: 'Ш',   team: 'town' },
-  doctor:  { label: 'Doctor',  short: 'ЛІК', team: 'town' },
-  maniac:  { label: 'Maniac',  short: 'МАН', team: 'town' },   // plays with the citizens
-  mafia:   { label: 'Mafia',   short: 'М',   team: 'mafia' },
-  don:     { label: 'Don',     short: 'ДМ',  team: 'mafia' },
+  citizen: { label: 'Citizen', short: 'МИР', code: 'CIT', team: 'town' },
+  sheriff: { label: 'Sheriff', short: 'Ш',   code: 'SHR', team: 'town' },
+  doctor:  { label: 'Doctor',  short: 'ЛІК', code: 'DOC', team: 'town' },
+  maniac:  { label: 'Maniac',  short: 'МАН', code: 'MAN', team: 'town' },   // plays with the citizens
+  mafia:   { label: 'Mafia',   short: 'М',   code: 'MAF', team: 'mafia' },
+  don:     { label: 'Don',     short: 'ДМ',  code: 'DON', team: 'mafia' },
 };
 const ROLE_ORDER = ['citizen', 'sheriff', 'doctor', 'maniac', 'mafia', 'don'];
 const TEAM_LABEL = { town: 'Citizens', mafia: 'Mafia' };

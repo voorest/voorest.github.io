@@ -102,6 +102,7 @@ main { max-width: 1180px; margin: 0 auto; padding: 1.25rem 16px 4rem; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .btn.primary:hover { filter: brightness(1.07); }
 .btn.ghost { background: transparent; }
+.btn.on { border-color: var(--accent); color: var(--accent); }
 .btn.danger { background: transparent; border-color: rgba(224, 75, 81, .5); color: var(--danger); }
 .btn.danger:hover { background: rgba(224, 75, 81, .12); }
 .danger-text { color: var(--danger) !important; }
@@ -124,7 +125,7 @@ textarea { width: 100%; resize: vertical; }
 .num-input { width: 4.5rem; }
 .filter { width: 100%; margin-bottom: .75rem; }
 .quick-add { margin: .5rem 0 .75rem; }
-.quick-add input { flex: 1; max-width: 420px; }
+.quick-add input { flex: 1 1 160px; max-width: 240px; }
 .settings { display: grid; gap: .75rem; }
 .settings input { max-width: 120px; }
 
@@ -279,6 +280,9 @@ details summary { cursor: pointer; color: var(--muted); font-size: .85rem; margi
 
 /* ---------- v2: nominations, nights, live mode ---------- */
 .demo-banner.subtle { background: var(--surface-2); color: var(--muted); border-bottom: 1px solid var(--border); }
+.vote-text { max-width: 640px; margin: .25rem 0 .6rem; }
+.vote-text textarea { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .95rem; line-height: 1.5; }
+.vote-errors { color: var(--warn); font-size: .85rem; margin-top: .25rem; }
 .noms { display: flex; flex-direction: column; gap: .35rem; margin-bottom: .5rem; }
 .nom-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) 5rem auto; gap: .4rem; align-items: center; max-width: 640px; }
 .nom-row select { width: 100%; }

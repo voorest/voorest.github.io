@@ -541,6 +541,38 @@ function viewGames() {
 /* ============================================================
    GAME SCREEN — editor for the admin (and in local mode), read-only otherwise
    ============================================================ */
+/** "2-5-1" lines → nominations (who, whom, votes). 0 as "who" = revote. Any non-digit separates numbers. */
+function parseVotes(text, seatCount) {
+  const rows = [], errors = [];
+  String(text || '').split('\n').forEach((line, k) => {
+    const nums = line.split(/[^0-9]+/).filter(Boolean).map(Number);
+    if (!nums.length) return;
+    const [by, target, votes] = nums;
+    if (nums.length < 2 || nums.length > 3) { errors.push(t('Line {n}: expected who-whom-votes, e.g. 2-5-1', { n: k + 1 })); return; }
+    const bad = by > seatCount ? by : (target < 1 || target > seatCount) ? target : null;
+    if (bad != null) { errors.push(t('Line {n}: there is no seat {s}', { n: k + 1, s: bad })); return; }
+    rows.push({ by: by || null, target, votes: votes == null ? null : Math.min(votes, 20) });
+  });
+  return { rows, errors };
+}
+/** The seat that clearly got the most votes in the last vote (revote rows if there are any); null on a tie. */
+function votedOutLeader(rows) {
+  const last = rows.some(r => !r.by) ? rows.filter(r => !r.by) : rows;
+  const counted = last.filter(r => r.votes != null);
+  if (!counted.length) return null;
+  const max = Math.max(...counted.map(r => r.votes));
+  const top = [...new Set(counted.filter(r => r.votes === max).map(r => r.target))];
+  return max > 0 && top.length === 1 ? top[0] : null;
+}
+function voteBoxHtml(text, ri, seatCount) {
+  const { errors } = parseVotes(text, seatCount);
+  return `<div class="vote-text">
+    <textarea class="vote-textarea" data-act="vote-text" data-round="${ri}" rows="${Math.max(3, String(text).split('\n').length + 1)}" spellcheck="false" placeholder="2-5-1&#10;7-3-4&#10;0-3-6">${h(text)}</textarea>
+    <div class="muted small">${t('One nomination per line: who-whom-votes, e.g. 2-5-1. Start with 0 for a revote (0-5-3). The rows below are replaced as you type; the seat with the most votes is marked as voted out (on a tie you pick).')}</div>
+    ${errors.length ? `<div class="vote-errors">${errors.map(h).join('<br>')}</div>` : ''}
+  </div>`;
+}
+
 function viewGame(id) {
   const isNew = id === 'new';
   const orig = isNew ? (UI.draft && UI.draft.id === 'new' && Store.canEdit() ? UI.draft.g : null) : Store.game(id);
@@ -562,8 +594,10 @@ function viewGame(id) {
   const players = [...db.players].sort((a, b) => fullName(a).localeCompare(fullName(b)));
   const used = {};
   g.seats.forEach(s => { if (s.playerId) used[s.playerId] = (used[s.playerId] || 0) + 1; });
-  const counts = GameLogic.roleCounts(g);
-  const warnings = ro ? [] : GameLogic.validate(g);
+  const roleCountHtml = () => { const c = GameLogic.roleCounts(g); return ROLE_ORDER.filter(r => c[r]).map(r => `<span class="chip role-${r}">${roleLabel(r)} × ${c[r]}</span>`).join(''); };
+  const warningsHtml = () => { const w = ro ? [] : GameLogic.validate(g); return w.length ? `<ul class="warnings">${w.map(x => `<li>${h(x)}</li>`).join('')}</ul>` : ''; };
+  // "Votes as text" box: open for one round at a time, its text is kept while you type
+  const vb = !ro && UI.voteBox && UI.voteBox.path === location.pathname ? UI.voteBox : null;
   const outcome = ro ? null : GameLogic.outcome(g);
   const suggested = outcome && outcome.winner;
   const has = r => GameLogic.hasRole(g, r);
@@ -579,7 +613,7 @@ function viewGame(id) {
       </select>`}</td>
       <td>${ro ? roleChip(s.role) : `<select data-act="seat-role" data-seat="${s.seat}" class="role-select ${s.role ? 'role-' + s.role : ''}">
         <option value="">—</option>
-        ${ROLE_ORDER.map(r => `<option value="${r}" ${s.role === r ? 'selected' : ''}>${roleLabel(r)} (${ROLES[r].short})</option>`).join('')}
+        ${ROLE_ORDER.map(r => `<option value="${r}" data-k="${h(`${t(ROLES[r].code)} ${ROLES[r].code} ${roleLabel(r)} ${ROLES[r].label}`)}" ${s.role === r ? 'selected' : ''}>${t(ROLES[r].code)} — ${roleLabel(r)}</option>`).join('')}
       </select>`}</td>
       ${ro ? '' : `<td><input type="number" min="0" max="4" value="${s.fouls || 0}" data-act="seat-fouls" data-seat="${s.seat}" class="fouls ${s.fouls >= 3 ? 'warnf' : ''}"></td>`}
       ${!ro && imported ? `<td><label class="pick ${s.alive === 1 ? 'on-ok' : ''}"><input type="checkbox" data-act="seat-alive" data-seat="${s.seat}" ${s.alive === 1 ? 'checked' : ''}> ${t('alive')}</label></td>` : ''}
@@ -647,8 +681,10 @@ function viewGame(id) {
         </div>`}
         <div class="phase day">
           <h4>☀ ${t('Day {n} — nominations', { n })}</h4>
+          ${vb && vb.ri === i ? voteBoxHtml(vb.text, i, g.seats.length) : ''}
           <div class="noms">${noms || `<span class="muted small">${t('No nominations recorded')}</span>`}</div>
-          ${ro ? '' : `<button class="btn small" data-act="nom-add" data-round="${i}">${t('+ Nomination')}</button>`}
+          ${ro ? '' : `<div class="row gap wrap"><button class="btn small" data-act="nom-add" data-round="${i}">${t('+ Nomination')}</button>
+            <button class="btn small ghost ${vb && vb.ri === i ? 'on' : ''}" data-act="nom-text" data-round="${i}" title="${t('Type the nominations as short lines: who-whom-votes')}">⌨ ${t('As text')}</button></div>`}
           <div class="picks"><span class="lbl">${t('Voted out:')}</span>${ro ? elimRo : picks('eliminated', dayAlive)}</div>
           ${ro ? ((r.removed || []).length ? `<div class="picks"><span class="lbl">${t('Removed for fouls:')}</span>${r.removed.map(s => `<span class="chip warn">${h(lbl(s))}</span>`).join(' ')}</div>` : '')
                : `<details ${(r.removed || []).length ? 'open' : ''}><summary>${t('Removed for fouls')}</summary><div class="picks">${picks('removed', dayAlive)}</div></details>`}
@@ -681,12 +717,15 @@ function viewGame(id) {
           <button class="btn small ghost" data-act="clear-roles">${t('Clear roles')}</button>
         </div>`}
       </div>
-      ${ro ? '' : `<div class="row gap quick-add">
-        <input id="qaName" placeholder="${t('New player’s name → goes to the first empty seat (nick can be added later)')}">
+      ${ro ? '' : `<div class="row gap wrap quick-add">
+        <input id="qaName" placeholder="${t('Name (e.g. Tania)')}" maxlength="40">
+        <input id="qaNick" placeholder="${t('Nick (e.g. Tianaboa)')}" maxlength="60">
+        ${genderSelect(null).replace('name="gender"', 'name="gender" id="qaGender"')}
         <button class="btn small" data-act="quick-add">${t('+ Add player')}</button>
+        <span class="muted small">${t('New player goes to the first empty seat.')}</span>
       </div>`}
-      <div class="role-count">${ROLE_ORDER.filter(r => counts[r]).map(r => `<span class="chip role-${r}">${roleLabel(r)} × ${counts[r]}</span>`).join('')}</div>
-      ${warnings.length ? `<ul class="warnings">${warnings.map(w => `<li>${h(w)}</li>`).join('')}</ul>` : ''}
+      <div class="role-count" id="roleCount">${roleCountHtml()}</div>
+      <div id="seatWarnings">${warningsHtml()}</div>
       <div class="table-wrap">
         <table class="seats">
           <thead><tr><th>#</th><th>${t('Player')}</th><th>${t('Role')}</th>${ro ? '' : `<th>${t('Fouls')}</th>`}${!ro && imported ? `<th>${t('End')}</th>` : ''}<th>${t('Status')}</th></tr></thead>
@@ -718,7 +757,11 @@ function viewGame(id) {
   if (ro) return;
   renderSaveBar();
 
-  const commit = () => viewGame(id);
+  /** Re-draw the editor; sel = element to focus afterwards (keeps keyboard entry going). */
+  const commit = sel => { viewGame(id); const el = sel && $(sel); if (el) el.focus(); };
+  const focusKey = el => (el.id ? '#' + el.id : el.dataset && el.dataset.act
+    ? `[data-act="${el.dataset.act}"]` + ['seat', 'round', 'idx', 'field'].filter(k => el.dataset[k] != null).map(k => `[data-${k}="${el.dataset[k]}"]`).join('')
+    : null);
 
   async function handle(act, el) {
     const seat = +el.dataset.seat, ri = +el.dataset.round, idx = +el.dataset.idx;
@@ -729,10 +772,18 @@ function viewGame(id) {
       case 'seat-role': s.role = el.value || null; break;
       case 'seat-alive': s.alive = el.checked ? 1 : 0; break;
       case 'seat-fouls': s.fouls = Math.max(0, Math.min(4, +el.value || 0)); if (s.fouls >= 4) toast(t('4 fouls — mark the player as removed in the current round')); break;
-      case 'nom-add': r.nominations.push({ by: null, target: null, votes: null }); break;
-      case 'nom-del': r.nominations.splice(idx, 1); break;
-      case 'nom-by': r.nominations[idx].by = el.value ? +el.value : null; break;
-      case 'nom-target': r.nominations[idx].target = el.value ? +el.value : null; break;
+      case 'nom-text': {
+        if (vb && vb.ri === ri) { UI.voteBox = null; commit(); return; }
+        const text = (r.nominations || []).filter(nm => nm.target).map(nm => [nm.by || 0, nm.target, nm.votes].filter(v => v != null).join('-')).join('\n');
+        UI.voteBox = { path: location.pathname, ri, text, auto: null };
+        commit('.vote-textarea');
+        const t2 = $('.vote-textarea'); if (t2) t2.setSelectionRange(t2.value.length, t2.value.length);
+        return;
+      }
+      case 'nom-add': UI.voteBox = null; r.nominations.push({ by: null, target: null, votes: null }); break;
+      case 'nom-del': UI.voteBox = null; r.nominations.splice(idx, 1); break;
+      case 'nom-by': UI.voteBox = null; r.nominations[idx].by = el.value ? +el.value : null; break;
+      case 'nom-target': UI.voteBox = null; r.nominations[idx].target = el.value ? +el.value : null; break;
       case 'nom-votes': r.nominations[idx].votes = el.value === '' ? null : +el.value; renderSaveBar(); return;
       case 'pick-eliminated':
       case 'pick-removed': {
@@ -774,13 +825,15 @@ function viewGame(id) {
         break;
       }
       case 'quick-add': {
-        const inp = $('#qaName');
-        const p = await attempt(() => Store.addPlayer(inp.value));
-        if (!p) { if (!inp.value.trim()) toast(t('Type a name first')); return; }
+        const name = $('#qaName').value, nickname = $('#qaNick').value, gender = $('#qaGender').value || null;
+        if (!name.trim() && !nickname.trim()) { toast(t('Type a name or a nick')); $('#qaName').focus(); return; }
+        const p = await attempt(() => Store.addPlayer({ name, nickname, gender }));
+        if (!p) return;   // e.g. the nick is taken: the fields keep what was typed
         const free = g.seats.find(x => !x.playerId);
         if (free && !g.seats.some(x => x.playerId === p.id)) { free.playerId = p.id; toast(t('{name} (No. {no}) → seat {seat}', { name: fullName(p), no: p.number, seat: free.seat })); }
         else toast(t('{name} added', { name: fullName(p) }));
-        break;
+        commit('#qaName');
+        return;
       }
       case 'winner': g.winner = el.dataset.val || null; break; // stored with Save changes, like everything else
       case 'notes': g.notes = el.value; renderSaveBar(); return;
@@ -805,11 +858,81 @@ function viewGame(id) {
   }
 
   wireDateFields($app);
+  const seatSel = 'select[data-act="seat-player"], select[data-act="seat-role"]';
   $$('[data-act]').forEach(el => {
+    if (el.matches(seatSel) || el.matches('.vote-textarea')) return;
     const evt = el.tagName === 'BUTTON' ? 'click' : 'change';
     el.addEventListener(evt, () => handle(el.dataset.act, el));
   });
-  $('#qaName').addEventListener('keydown', e => { if (e.key === 'Enter') handle('quick-add', e.target); });
+  // Player and role pickers: a change made with the keyboard is applied at once but the page is re-drawn
+  // only on Enter (focus moves to the same picker one seat down) or when you leave the picker.
+  // A mouse pick re-draws right away, as before.
+  // Type-to-pick is our own (browsers differ): letters typed quickly match the start of any word of an option
+  // ("ми" → МИР — Мирний, "sh" → Sheriff); the same letter again jumps to the next option with that letter.
+  let seatPending = false, lastKey = 0, typed = '', typedAt = 0;
+  const words = o => (o.dataset.k || o.textContent).toLowerCase().split(/[\s—()]+/).filter(Boolean);
+  function typeToPick(el, ch) {
+    const now = Date.now();
+    typed = (now - typedAt > 900 ? '' : typed) + ch.toLowerCase(); typedAt = now;
+    const opts = [...el.options].filter(o => o.value);
+    const starts = (o, x) => words(o).some(w => w.startsWith(x));
+    let m = opts.find(o => starts(o, typed));
+    if (!m && [...typed].every(c => c === typed[0])) {
+      const list = opts.filter(o => starts(o, typed[0]));
+      m = list[(list.indexOf(el.selectedOptions[0]) + 1) % list.length];
+      typed = typed[0];
+    }
+    if (m && m.value !== el.value) { el.value = m.value; el.dispatchEvent(new Event('change')); }
+  }
+  $$(seatSel).forEach(el => {
+    const s = g.seats.find(x => x.seat === +el.dataset.seat);
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const next = `select[data-act="${el.dataset.act}"][data-seat="${Math.min(+el.dataset.seat + 1, g.seats.length)}"]`;
+        if (seatPending) { seatPending = false; commit(next); } else if ($(next)) $(next).focus();
+        return;
+      }
+      if (e.key !== 'Tab') lastKey = Date.now();
+      if (e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); typeToPick(el, e.key); }
+    });
+    el.addEventListener('change', () => {
+      if (el.dataset.act === 'seat-role') s.role = el.value || null; else s.playerId = el.value || null;
+      if (Date.now() - lastKey > 1500) { seatPending = false; commit(); return; }
+      seatPending = true;
+      if (el.dataset.act === 'seat-role') { el.classList.remove(...ROLE_ORDER.map(r => 'role-' + r)); if (s.role) el.classList.add('role-' + s.role); }
+      $('#roleCount').innerHTML = roleCountHtml();
+      $('#seatWarnings').innerHTML = warningsHtml();
+      renderSaveBar();
+    });
+    el.addEventListener('blur', () => {
+      if (!seatPending) return;
+      seatPending = false;
+      setTimeout(() => { const a = document.activeElement; commit(a && a !== document.body ? focusKey(a) : null); });
+    });
+  });
+  // Votes as text: every edit rewrites the round's nominations (and the voted-out pick when one seat clearly leads)
+  const ta = $('.vote-textarea');
+  if (ta) {
+    let timer;
+    ta.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const ri = +ta.dataset.round, r = g.rounds[ri];
+        vb.text = ta.value;
+        const { rows } = parseVotes(ta.value, g.seats.length);
+        r.nominations = rows;
+        const day = tl.phases.find(p => p.round === ri + 1 && p.phase === 'day');
+        const lead = votedOutLeader(rows);
+        if (lead && day.alive.includes(lead)) { r.eliminated = [lead]; vb.auto = lead; }
+        else if (!lead && vb.auto && (r.eliminated || []).length === 1 && r.eliminated[0] === vb.auto) { r.eliminated = []; vb.auto = null; }
+        const a = ta.selectionStart, b = ta.selectionEnd;
+        commit('.vote-textarea');
+        const t2 = $('.vote-textarea'); if (t2) t2.setSelectionRange(a, b);
+      }, 300);
+    });
+  }
+  $$('#qaName, #qaNick').forEach(el => el.addEventListener('keydown', e => { if (e.key === 'Enter') handle('quick-add', el); }));
   if ($('#nextSameBtn')) $('#nextSameBtn').onclick = () => {
     if (gameDirty()) { toast(t('Save your changes first')); return; }
     draftNextGame(orig);
