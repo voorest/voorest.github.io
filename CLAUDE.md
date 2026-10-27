@@ -55,6 +55,12 @@ Owner and game master: @voorest (the only admin). Live: https://mafiabcn.com (do
   - Address: plain `/compare` for the default; once a pair is picked it becomes `/compare/<nick>-vs-<nick>` with nick slugs (Latin, lower case, `♀/♂` → `-f/-m`, e.g. `/compare/orsini-f-vs-micro`). A nick with no usable slug, or one shared with another player, uses `p<No.>`. Not places, because places change. Old `/compare/<No.>/<No.>` links are converted. The slug rules are in both `app.js` and `src/seo.js` (keep them the same).
   - "🔗 Share" button: the phone share sheet on touch devices, otherwise copies the link (`?lang=en` added when the site is in English). Shared links get a Telegram preview title with both nicks.
 
+## Scanner protection (Cloudflare WAF, Oct 2026)
+- One custom rule "Block scanners" (Security → WAF → Custom rules, Block), set by the owner in the dashboard. It is an **allowlist**: anything that is not a real page, file or API path is blocked before the Worker runs; also non-GET/HEAD requests outside `/api/`. Chosen after a log check on 27 Oct 2026: 1237 of 2000 requests were scanners (.env, .aws, .git, wp-*, phpinfo, actuator…), mostly from data centres (Google Cloud, TC Datacenter PL, DigitalOcean).
+- Allowed: `/`, `/index.html`, `/dashboard`, `/games`, `/players`, `/compare`, `/about`, `/data`, `/settings`, `/bot`, `/me`, `/robots.txt`, `/sitemap.xml`, the favicon/android-chrome/webmanifest files, `/api/data|health|me|telegram/webhook`; prefixes `/game/`, `/player/`, `/compare/`, `/login-error/`, `/js/`, `/css/`, `/images/`, `/apple-touch-icon`, `/cdn-cgi/`, `/api/me/`, `/api/avatar/`, `/api/auth/`, `/api/admin/`.
+- **When adding a new page route, a top-level file in `public/` or a new `/api/` branch, tell the owner to add it to the rule**, or it will be blocked.
+- Don't enable Bot Fight Mode (it breaks the Telegram webhook).
+
 ## Search engines & link previews (open for indexing, Oct 2026)
 - `public/robots.txt`: everything allowed except `/api/`; points to the sitemap.
 - **Only the home page and `/about` are indexed** (decided Oct 2026, privacy): `/sitemap.xml` (Worker, `src/seo.js`) lists just those two, in uk and en. Every other page gets `noindex, follow` but keeps its own title and link preview for Telegram.
