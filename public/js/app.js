@@ -69,7 +69,8 @@ function avatar(p, large = false) {
   const cls = large ? 'ava ava-lg' : 'ava';
   const pl = p && typeof p === 'object' ? p : Store.player(p);
   const g = pl ? (Store.player(pl.id) || pl).gender : null;
-  if (Store.isLive() && Store.user() && pl && pl.av) {
+  const u = Store.user();   // photos are for members: the admin or a login linked to a player
+  if (Store.isLive() && u && (u.role === 'admin' || u.playerId) && pl && pl.av) {
     return `<img class="${cls}" src="/api/avatar/${pl.number}?v=${pl.av}" alt="" loading="lazy" onerror="this.outerHTML=ICON_HTML('${cls}','${g || ''}')">`;
   }
   return ICON_HTML(cls, g);

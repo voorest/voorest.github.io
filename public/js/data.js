@@ -109,7 +109,8 @@ const Store = (() => {
   }
 
   /* ---- loading ----
-     Live site: the browser keeps its own copy of the public data (+ version) in localStorage.
+     Live site: the browser keeps its own copy of the data (+ version) in localStorage: the public copy (nicks only)
+     for guests, plus short names for members (linked players and the admin).
      Each visit asks the server "is my version still current?" (1 tiny request, 0 database reads).
      Anti-spam: 3 checks per minute are free; after that the device must wait 10 s, then 30 s,
      60 s, 2 min, 5 min (like "resend SMS code"). While waiting, the saved copy is shown. */
@@ -172,6 +173,8 @@ const Store = (() => {
             db = normalize(cache.data);
             if (JSON.stringify(cache.me) !== JSON.stringify(me)) writeCache({ ...cache, me });
           } else {
+            // members also get short names (guests: nicks only); they are merged into the copy kept in this browser
+            if (body.names && body.data && Array.isArray(body.data.players)) body.data.players.forEach(p => { if (body.names[p.id]) p.name = body.names[p.id]; });
             db = normalize(body.data);
             writeCache({ version: body.version, data: body.data, me, savedAt: new Date().toISOString() });
           }

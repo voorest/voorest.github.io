@@ -154,7 +154,8 @@ async function getData(env) {
     schema: 2,
     generatedAt: new Date().toISOString(),
     settings: s,
-    // name + nick are public; real first/last names never leave the admin API. av = avatar version (photos are for logged-in users only)
+    // full list (admin). The public copy drops `name` (see rebuildSnapshot); real first/last names never leave the admin API.
+    // av = avatar version (photos are for members only)
     players: players.results.map(p => ({ id: String(p.id), number: p.number, name: p.name || '', nickname: p.nickname, gender: p.gender || null, av: p.avatar_v || 0, createdAt: p.created_at })),
     games: [...byGame.values()],
   };
@@ -170,6 +171,20 @@ async function currentUser(request, env) {
       WHERE s.token_hash = ? AND s.expires_at > datetime('now')`
   ).bind(await sha256(token)).first();
   return row || null;
+}
+/** Members = the admin, or a login linked to a player. They see short names and photos; others see nicks and icons. */
+const isMember = u => !!u && (u.role === 'admin' || (u.player_id != null && u.status === 'linked'));
+/** Short names by player id, read straight from the database (they are not in the public copy). */
+async function playerNames(env) {
+  const { results } = await env.DB.prepare("SELECT id, name FROM players WHERE status != 'hidden' AND name IS NOT NULL AND name != ''").all();
+  return Object.fromEntries(results.map(r => [String(r.id), r.name]));
+}
+/** Public copy + short names, for the bot (it answers linked players only). */
+async function dataWithNames(env) {
+  const data = JSON.parse((await publicSnapshot(env)).body);
+  const names = await playerNames(env);
+  data.players.forEach(p => { if (names[p.id]) p.name = names[p.id]; });
+  return data;
 }
 async function requireAdmin(request, env) {
   const user = await currentUser(request, env);
@@ -549,7 +564,7 @@ async function autoAvatar(env, accountId) {
   if (r && r.provider_uid && r.provider_uid !== 'dev-admin') await avatarFromTelegram(env, r.pid, r.provider_uid);
 }
 async function serveAvatar(request, env, number) {
-  if (!await currentUser(request, env)) return new Response('Log in to see photos', { status: 403 });
+  if (!isMember(await currentUser(request, env))) return new Response('Log in to see photos', { status: 403 });
   const p = await env.DB.prepare('SELECT id FROM players WHERE COALESCE(number, id) = ?').bind(int(number, 1, 1e9)).first();
   const img = p ? await env.KV.getWithMetadata(`avatar:${p.id}`, 'arrayBuffer') : null;
   if (!img || !img.value) return new Response('No photo', { status: 404 });
@@ -587,7 +602,8 @@ async function rebuildSnapshot(env) {
   const data = await getData(env);
   const version = new Date().toISOString();
   data.version = version;
-  const body = JSON.stringify(data);
+  // the public copy has nicks only: short names go to members separately (dataEndpoint), so nothing is stored twice
+  const body = JSON.stringify({ ...data, players: data.players.map(({ name, ...p }) => p) });
   await env.DB.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('dataVersion', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at").bind(version).run();
   if (env.KV) {
     try { await env.KV.put(SNAPSHOT_KEY, body, { metadata: { version } }); }
@@ -650,9 +666,14 @@ async function dataEndpoint(request, env, url) {
     const data = await getData(env);
     return new Response(`{"me":${me},"version":"live","data":${JSON.stringify(data)}}`, { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
   }
+  // Guests get the public copy (nicks only); members get the same copy plus short names. The version says which
+  // one the browser holds, so logging in or out brings the right copy.
   const snap = await publicSnapshot(env);
-  if (url.searchParams.get('v') === snap.version) return json({ me: JSON.parse(me), version: snap.version, unchanged: true });
-  return new Response(`{"me":${me},"version":${JSON.stringify(snap.version)},"data":${snap.body}}`, { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
+  const member = isMember(user);
+  const version = (member ? 'm-' : 'g-') + snap.version;
+  if (url.searchParams.get('v') === version) return json({ me: JSON.parse(me), version, unchanged: true });
+  const names = member ? `,"names":${JSON.stringify(await playerNames(env))}` : '';
+  return new Response(`{"me":${me},"version":${JSON.stringify(version)},"data":${snap.body}${names}}`, { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 }
 
 /* ---------------- backups in KV ---------------- */
@@ -769,7 +790,7 @@ async function api(request, env, url) {
       origin: url.origin,
       loginNotice: info => loginNotice(env, { ...info, via: 'bot' }),
       autoAvatar: accountId => autoAvatar(env, accountId),
-      publicData: async () => JSON.parse((await publicSnapshot(env)).body),
+      publicData: () => dataWithNames(env),
     });
   }
   if (path === '/api/me' && method === 'GET') return json(meFor(await currentUser(request, env), env, url));
@@ -823,7 +844,7 @@ async function api(request, env, url) {
     if (path === '/api/admin/bot/chats' && method === 'GET') return json(await botChats(env));
     if (path === '/api/admin/bot/posts' && method === 'GET') return json(await botPosts(env));
     if (path === '/api/admin/bot/preview' && method === 'POST') {
-      return json(await botPreview(env, await readBody(request), { origin: url.origin, publicData: async () => JSON.parse((await publicSnapshot(env)).body) }));
+      return json(await botPreview(env, await readBody(request), { origin: url.origin, publicData: () => dataWithNames(env) }));
     }
     if (path === '/api/admin/bot/setup' && method === 'POST') { await botSetup(env, url); return json(await botStatus(env, url.origin)); }
     if (path === '/api/admin/bot/posts' && method === 'POST') return json(await createPost(env, admin, await readBody(request)), 201);
