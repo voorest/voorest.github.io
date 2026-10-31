@@ -423,7 +423,7 @@ function viewDashboard() {
           <div class="title-body">
             <div class="title-name">${h(tt.title)}</div>
             ${tt.player
-              ? `<a class="title-holder" href="${playerHref(tt.player)}">${h(tt.player.nick)}</a><div class="title-detail">${h(tt.detail)}</div>`
+              ? `<a class="title-holder" href="${playerHref(tt.player)}">${h(tt.player.name)}</a><div class="title-detail">${h(tt.detail)}</div>`
               : `<div class="title-detail">${t('Nobody yet')} (${h(tt.rule)})</div>`}
             <div class="title-desc">${h(tt.desc)}</div>
           </div>
@@ -439,7 +439,7 @@ function viewDashboard() {
             ${sorted.map((p, i) => `
               <tr>
                 <td class="muted">${i + 1}</td>
-                <td class="who-cell"><a href="${playerHref(p)}">${avatar(p)}<span>${h(p.nick)}</span></a></td>
+                <td class="who-cell"><a href="${playerHref(p)}">${avatar(p)}<span>${h(p.name)}</span></a></td>
                 <td>${p.games}</td>
                 <td>${p.wins}</td>
                 <td>${pct(p.winRate)}</td>
@@ -465,9 +465,9 @@ function viewDashboard() {
             const list = st.players.filter(p => p.byRole[r].g > 0)
               .sort((a, b) => b.roleRating[r] - a.roleRating[r] || b.byRole[r].g - a.byRole[r].g).slice(0, 5);
             return `<div class="role-block">
-              <h4>${roleChip(r)} <span class="muted small" title="${t('Average win rate of this role · games where this role was in play')}">${t('avg')} ${pct(st.baseline[r])} · ${tn(st.roleGames[r], 'game')}</span></h4>
+              <h4>${roleChip(r)} <span class="muted small" title="${t('Average win rate of this role · games where this role was in play')}">${t('average')} ${pct(st.baseline[r])} · ${tn(st.roleGames[r], 'game')}</span></h4>
               ${list.length ? list.map(p => `
-                <div class="bar-row"><a href="${playerHref(p)}">${h(p.nick)}</a>${bar(p.roleRating[r], 1, 'role-' + r)}<span class="num">${pct(p.roleRating[r])} <span class="muted">${p.byRole[r].w}/${p.byRole[r].g}</span></span></div>`).join('')
+                <div class="bar-row"><a href="${playerHref(p)}">${h(p.name)}</a>${bar(p.roleRating[r], 1, 'role-' + r)}<span class="num">${pct(p.roleRating[r])} <span class="muted">${p.byRole[r].w}/${p.byRole[r].g}</span></span></div>`).join('')
                 : `<p class="muted small">${t('No games yet.')}</p>`}
             </div>`;
           }).join('')}
@@ -478,11 +478,11 @@ function viewDashboard() {
         <h2>${t('Attendance')}</h2>
         <p class="muted small">${t('Games played (and number of game days).')}</p>
         ${[...st.players].sort((a, b) => b.games - a.games || b.days - a.days).slice(0, 30).map(p => `
-          <div class="bar-row"><a href="${playerHref(p)}">${h(p.nick)}</a>${bar(p.games, maxGames, 'accent')}<span class="num">${p.games} <span class="muted">· ${p.days}${t('d')}</span></span></div>`).join('')}
+          <div class="bar-row"><a href="${playerHref(p)}">${h(p.name)}</a>${bar(p.games, maxGames, 'accent')}<span class="num">${p.games} <span class="muted">· ${p.days}${t('d')}</span></span></div>`).join('')}
       </section>
     </div>
 
-    <h2 class="section-title">${t('Last game day')} <span class="muted small">· ${fmtDate(lastDay)} · <a href="/games">${t('all games')}</a></span></h2>
+    <h2 class="section-title">${t('Recent games')} <span class="muted small">· ${fmtDate(lastDay)} · <a href="/games">${t('all games')}</a></span></h2>
     <section class="card game-list">${recent.map(gameRow).join('')}</section>
   `;
 
