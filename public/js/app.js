@@ -1701,7 +1701,6 @@ function viewSettings() {
 /* Telegram texts are always in Ukrainian, whatever language the site is shown in. */
 /* Short format (agreed 31 Oct 2026): nicks only, roles as emoji, " | " between groups,
    links written as [text](address) and sent as clickable words (see postHtml). Citizens are not listed. */
-const UK_ROLE_ICONS = { don: '🎩', mafia: '🔫', sheriff: '⭐', doctor: '🩺', maniac: '🔪' };
 const tgLink = (text, url) => `[${text}](${url})`;
 const resultUk = w => (w === 'town' ? 'перемога мирних' : w === 'mafia' ? 'перемога мафії' : 'не завершена');
 const resultDot = w => (w === 'town' ? '🔴' : w === 'mafia' ? '⚫' : '⏳');
@@ -1709,7 +1708,7 @@ const resultDot = w => (w === 'town' ? '🔴' : w === 'mafia' ? '⚫' : '⏳');
 function gameBlockUk(g) {
   const part = role => {
     const nicks = g.seats.filter(s => s.role === role && s.playerId).map(s => Store.playerNick(s.playerId));
-    return nicks.length ? `${UK_ROLE_ICONS[role]} ${nicks.join(', ')}` : '';
+    return nicks.length ? `${ROLES[role].icon} ${nicks.join(', ')}` : '';
   };
   const lines = [`${resultDot(g.winner)} ${tgLink(`Гра ${g.number}`, location.origin + gameHref(g))} — ${resultUk(g.winner)}`];
   for (const roles of [['don', 'mafia'], ['sheriff', 'doctor', 'maniac']]) {

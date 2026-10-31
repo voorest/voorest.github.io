@@ -127,7 +127,7 @@ Sessions are stored in D1 as SHA-256 hashes; the cookie is HttpOnly.
 - **Links:** post text may contain `[text](https://…)`; posts are sent with HTML parse mode (`postHtml` in bot.js escapes everything else), link preview off. The Bot page shows a live preview under the text box, and History shows the links too.
 - Format, in Ukrainian, **nicks only**, `" | "` between groups:
   - header `[Mafia BCN](site) | DD/MM/YYYY`; the day post adds `Мирні N : M Мафія`;
-  - per game: `⚫ [Гра N](game link) — перемога мафії` / `🔴 … — перемога мирних`, then `🎩 don | 🔫 mafia, …` and `⭐ sheriff | 🩺 doctor | 🔪 maniac`. Citizens are not listed;
+  - per game: `⚫ [Гра N](game link) — перемога мафії` / `🔴 … — перемога мирних`, then `🎩 don | 🕴️ mafia, …` and `⭐ sheriff | 🩺 doctor | 🔪 maniac`. Role emoji come from `ROLES[r].icon` in data.js (also used for the site's titles: 🏠 citizen); one set everywhere. Citizens are not listed;
   - day facts, one line each, skipped if empty: `🏆 Без поразок:` (100% wins that day), `📈` / `📉` biggest rating moves (numbers only), `🆕 Нові:`;
   - `🏅 Топ-3 (від N ігор): 1. nick 64% ↑1 | …`;
   - footer `📊 Твоя статистика: /mystats у @mafia_bcn_bot`.

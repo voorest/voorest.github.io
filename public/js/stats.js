@@ -150,9 +150,8 @@ const Stats = {
       p => { const rs = ROLE_ORDER.filter(r => p.byRole[r].g); const v = rs.reduce((a, r) => a + p.roleRating[r] - st.baseline[r], 0) / rs.length; return `${t(v >= 0 ? '{p}% above usual' : '{p}% below usual', { p: Math.abs(Math.round(v * 100)) })} · ${tn(rs.length, 'role')}`; },
       t('played 3+ roles'), t('Many roles'));
 
-    const icons = { sheriff: '⭐', don: '🎩', mafia: '🕶️', citizen: '🏠', doctor: '💊', maniac: '🔪' };
     ['sheriff', 'don', 'mafia', 'citizen', 'doctor', 'maniac'].forEach(r => {
-      add(icons[r], t('Best ' + ROLES[r].label), t('Best rating as {role} (usual win rate {avg})', { role: roleLabel(r), avg: pct(st.baseline[r]) }),
+      add(ROLES[r].icon, t('Best ' + ROLES[r].label), t('Best rating as {role} (usual win rate {avg})', { role: roleLabel(r), avg: pct(st.baseline[r]) }),
         best(P.filter(p => p.byRole[r].g > 0 && p.byRole[r].w > 0), p => p.roleRating[r], p => p.byRole[r].g),
         p => t('rating {r} · {w}/{g} wins', { r: pct(p.roleRating[r]), w: p.byRole[r].w, g: p.byRole[r].g }), t('a win as {role}', { role: roleLabel(r) }), roleLabel(r));
     });
