@@ -251,7 +251,6 @@ I18N.dict.uk = {
   "Save these changes to Game #{n} ({date})?": "Зберегти ці зміни в грі #{n} ({date})?",
   "Game saved": "Гру збережено",
   "No.": "№",
-  "Last played": "Остання гра",
   "Name (short, e.g. Tania)": "Ім’я (коротко, напр. Таня)",
   "Nick (public, unique)": "Нік (публічний, унікальний)",
   "Gender (icon)": "Стать (іконка)",

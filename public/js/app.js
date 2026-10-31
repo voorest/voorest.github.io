@@ -375,6 +375,21 @@ const LB_COLS = () => [
   { key: 'survived', label: t('Alive'), get: p => (p.games ? p.survived / p.games : 0) + p.survived / 1e4, title: t('Games alive at the end / games played') },
 ];
 
+/** The stats cells of a leaderboard row, after the player cell (same columns as LB_COLS().slice(1)).
+    Used by the dashboard leaderboard and the Players page; s = the player's stats, or nothing yet. */
+function lbCells(s) {
+  if (!s || !s.games) return LB_COLS().slice(1).map(() => '<td class="muted">–</td>').join('');
+  return `<td>${s.games}</td>
+    <td>${s.wins}</td>
+    <td>${pct(s.winRate)}</td>
+    <td class="wr"><b>${pct(s.rating)}</b> ${bar(s.rating, 1)}</td>
+    <td class="${s.aboveExpected >= 0 ? 'pos' : 'neg'}">${signed(s.aboveExpected)}</td>
+    <td>${s.days}</td>
+    ${ROLE_ORDER.map(r => `<td class="rolecell">${s.byRole[r].g ? `${s.byRole[r].w}/${s.byRole[r].g}` : '<span class="muted">–</span>'}</td>`).join('')}
+    <td>${s.survived}/${s.games}</td>`;
+}
+const sortHead = (c, key, dir) => `<th data-sort="${c.key}" class="sortable ${c.key === key ? 'sorted' : ''}" ${c.title ? `title="${h(c.title)}"` : ''}>${c.label}${c.key === key ? (dir < 0 ? ' ↓' : ' ↑') : ''}</th>`;
+
 function viewDashboard() {
   const db = Store.get();
   const st = Stats.compute(db);
@@ -445,20 +460,13 @@ function viewDashboard() {
     <section class="card">
       <div class="table-wrap">
         <table class="lb">
-          <thead><tr><th>#</th>${cols.map(c => `<th data-sort="${c.key}" class="sortable ${c.key === key ? 'sorted' : ''}" ${c.title ? `title="${h(c.title)}"` : ''}>${c.label}${c.key === key ? (dir < 0 ? ' ↓' : ' ↑') : ''}</th>`).join('')}</tr></thead>
+          <thead><tr><th>#</th>${cols.map(c => sortHead(c, key, dir)).join('')}</tr></thead>
           <tbody>
             ${sorted.map((p, i) => `
               <tr>
                 <td class="muted">${i + 1}</td>
                 <td class="who-cell"><a href="${playerHref(p)}">${avatar(p)}<span>${h(p.name)}</span></a></td>
-                <td>${p.games}</td>
-                <td>${p.wins}</td>
-                <td>${pct(p.winRate)}</td>
-                <td class="wr"><b>${pct(p.rating)}</b> ${bar(p.rating, 1)}</td>
-                <td class="${p.aboveExpected >= 0 ? 'pos' : 'neg'}">${signed(p.aboveExpected)}</td>
-                <td>${p.days}</td>
-                ${ROLE_ORDER.map(r => `<td class="rolecell">${p.byRole[r].g ? `${p.byRole[r].w}/${p.byRole[r].g}` : '<span class="muted">–</span>'}</td>`).join('')}
-                <td>${p.survived}/${p.games}</td>
+                ${lbCells(p)}
               </tr>`).join('')}
           </tbody>
         </table>
@@ -1073,16 +1081,18 @@ function viewPlayers() {
 
   // The player No. (order of joining) is for the admin only; visitors see the list without it
   const numCol = { key: 'number', label: t('No.'), get: p => p.number };
+  // the same stats columns as the leaderboard (players without games sort last)
+  const statCols = LB_COLS().slice(1).map(c => ({ ...c, get: p => (byId[p.id] && byId[p.id].games ? c.get(byId[p.id]) : -1) }));
   const cols = [
     ...(edit ? [numCol] : []),
     { key: 'nickname', label: t('Player'), get: p => fullName(p).toLowerCase() },
-    { key: 'games', label: t('Games'), get: p => (byId[p.id] || {}).games || 0 },
-    { key: 'wins', label: t('Wins'), get: p => (byId[p.id] || {}).wins || 0 },
-    { key: 'rating', label: t('Rating'), get: p => (byId[p.id] || {}).rating || 0 },
-    { key: 'last', label: t('Last played'), get: p => (byId[p.id] || {}).lastPlayed || '' },
+    ...statCols,
   ];
-  const { key, dir } = UI.plSort;
-  const col = cols.find(c => c.key === key) || numCol;
+  const nCols = cols.length + (adminLive ? 2 : 0) + (edit ? 1 : 0);
+  const { dir } = UI.plSort;
+  // visitors don't see No., so their default order is by rating
+  const col = cols.find(c => c.key === UI.plSort.key) || cols.find(c => c.key === 'rating');
+  const key = col.key;
   const list = [...db.players].sort((a, b) => { const va = col.get(a), vb = col.get(b); return va < vb ? -dir : va > vb ? dir : a.number - b.number; });
 
   const row = p => {
@@ -1091,7 +1101,7 @@ function viewPlayers() {
     const tg = tgFor(p.id);
     if (UI.editingPlayer === p.id) {
       const pre = tg.find(a => !a.linked) || tg[0];
-      return `<tr class="editing"><td class="muted">${p.number}</td><td colspan="${adminLive ? 8 : 6}">
+      return `<tr class="editing"><td class="muted">${p.number}</td><td colspan="${nCols - 1}">
         <form class="edit-player row gap wrap" data-id="${p.id}">
           <label class="field"><span>${t('Name (short, e.g. Tania)')}</span><input name="name" value="${h(p.name || '')}" maxlength="40"></label>
           <label class="field"><span>${t('Nick (public, unique)')}</span><input name="nickname" value="${h(p.nickname)}" required maxlength="60"></label>
@@ -1114,10 +1124,7 @@ function viewPlayers() {
             : ['muted', t('Waiting for the first login or Start (matched by @username)')];
           return `<span class="chip ${cls}" title="${h(tip)}">${h(label)}</span>`;
         }).join(' ') : '<span class="muted">—</span>'}</td>` : ''}
-      <td>${s ? s.games : 0}</td>
-      <td>${s ? s.wins : 0}</td>
-      <td>${s ? pct(s.rating) : '—'}</td>
-      <td>${s && s.lastPlayed ? fmtDate(s.lastPlayed) : '—'}</td>
+      ${lbCells(s)}
       ${edit ? `<td class="actions"><button class="btn small ghost icon-only" data-edit="${p.id}" title="${t('Edit')}" aria-label="${t('Edit')}">${ICON_EDIT}</button><button class="btn small ghost icon-only danger-text" data-del="${p.id}" title="${t('Delete')}" aria-label="${t('Delete')}">${ICON_DELETE}</button></td>` : ''}
     </tr>`;
   };
@@ -1140,12 +1147,12 @@ function viewPlayers() {
       <div class="table-wrap">
         <table class="players">
           <thead><tr>
-            ${cols.slice(0, 2).map(c => `<th data-sort="${c.key}" class="sortable ${c.key === key ? 'sorted' : ''}">${c.label}${c.key === key ? (dir < 0 ? ' ↓' : ' ↑') : ''}</th>`).join('')}
+            ${cols.slice(0, edit ? 2 : 1).map(c => sortHead(c, key, dir)).join('')}
             ${adminLive ? `<th>${t('Real name')}</th><th>Telegram</th>` : ''}
-            ${cols.slice(2).map(c => `<th data-sort="${c.key}" class="sortable ${c.key === key ? 'sorted' : ''}">${c.label}${c.key === key ? (dir < 0 ? ' ↓' : ' ↑') : ''}</th>`).join('')}
+            ${cols.slice(edit ? 2 : 1).map(c => sortHead(c, key, dir)).join('')}
             ${edit ? '<th></th>' : ''}
           </tr></thead>
-          <tbody>${list.map(row).join('') || `<tr><td colspan="9" class="muted">${t('No players yet.')}</td></tr>`}</tbody>
+          <tbody>${list.map(row).join('') || `<tr><td colspan="${nCols}" class="muted">${t('No players yet.')}</td></tr>`}</tbody>
         </table>
       </div>
       ${adminLive ? `<p class="muted small">${t('Real name and Telegram are private (only you see them). If you add someone’s Telegram @username, they are linked to this player automatically the first time they log in.')}</p>` : ''}
