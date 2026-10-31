@@ -44,6 +44,7 @@ I18N.dict.uk = {
   "Log out": "Вийти",
   "Dev login": "Вхід (розробка)",
   "Log in with Telegram": "Увійти через Telegram",
+  "Log in": "Увійти",
   "Saving…": "Збереження…",
   "Saved ✓": "Збережено ✓",
   "Save failed": "Не збережено",

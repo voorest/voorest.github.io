@@ -272,6 +272,12 @@ details summary { cursor: pointer; color: var(--muted); font-size: .85rem; margi
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 
+/* tablets: keep every menu item visible in the header */
+@media (max-width: 1024px) {
+  .topbar { gap: .75rem; }
+  nav a { padding: .4rem .5rem; }
+  .auth .who .chip { display: none; }
+}
 @media (max-width: 640px) {
   .topbar { gap: .75rem; }
   h1 { font-size: 1.3rem; }
@@ -318,6 +324,7 @@ td.neg, .kpi-val.neg, span.neg { color: var(--danger); }
 .auth .who { font-size: .9rem; }
 .btn.tg { background: #2aabee; border-color: #2aabee; color: #fff; font-weight: 600; }
 .btn.tg:hover { filter: brightness(1.08); background: #2aabee; }
+.btn.tg { display: inline-flex; align-items: center; gap: .4rem; }
 .chip.admin { color: var(--accent); border-color: rgba(214, 165, 72, .5); }
 .save-state { font-size: .85rem; color: var(--muted); white-space: nowrap; }
 .save-state.saving { color: var(--warn); }
@@ -405,7 +412,7 @@ canvas.crop:active { cursor: grabbing; }
 }
 
 /* Language switch (UA / EN) */
-.lang-switch { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.lang-switch { display: flex; flex: none; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .lang-switch button { background: none; border: 0; color: var(--muted); font: inherit; font-size: .8rem; font-weight: 600; padding: .3rem .55rem; cursor: pointer; }
 .lang-switch button:hover { color: var(--text); }
 .lang-switch button.on { background: var(--surface-2); color: var(--accent); }

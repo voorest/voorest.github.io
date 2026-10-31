@@ -203,6 +203,7 @@ function loadDemo() {
 
 /* ---------- top bar: login + save status ---------- */
 /** Login area: who you are + Log out, or the login button. Same markup in the top bar and in the phone menu. */
+const ICON_PLANE = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M21 4 3 11l6 2 2 6 3-4 5 4 2-15zM9 13l9-6-7 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>';
 const ICON_LOGOUT = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M9 20H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h4M16 16l4-4-4-4M20 12H9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 /** Login block. In the side menu (drawer = true) Log out is an icon next to the close button instead. */
 function authHtml(drawer = false) {
@@ -211,10 +212,10 @@ function authHtml(drawer = false) {
   if (u) {
     const me = u.playerId ? Store.player(u.playerId) : null;
     return `<span class="who">${me ? avatar(me) : ''}<span>${h(u.nickname || (u.username ? '@' + u.username : u.name || t('you')))}</span>${u.role === 'admin' ? ` <span class="chip admin">${t('admin')}</span>` : ''}</span>`
-      + (drawer ? '' : `<button class="btn small ghost logout-btn">${t('Log out')}</button>`);
+      + (drawer ? '' : `<button type="button" class="btn small ghost icon-only logout-btn" title="${t('Log out')}" aria-label="${t('Log out')}">${ICON_LOGOUT.replace(/22/g, '18')}</button>`);
   }
   if (Store.devLogin()) return `<a class="btn small" href="/api/auth/dev-login">${t('Dev login')}</a>`;
-  if (Store.loginAvailable()) return `<a class="btn small tg" href="/api/auth/telegram/start?back=${encodeURIComponent(location.pathname)}">${t('Log in with Telegram')}</a>`;
+  if (Store.loginAvailable()) return `<a class="btn small tg" href="/api/auth/telegram/start?back=${encodeURIComponent(location.pathname)}" title="${t('Log in with Telegram')}">${ICON_PLANE}<span>${t('Log in')}</span></a>`;
   return '';
 }
 /* Links that only some people may use are not in index.html, so crawlers never find them; they are added
