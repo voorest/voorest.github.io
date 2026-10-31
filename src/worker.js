@@ -519,6 +519,7 @@ async function backup(env) {
 // Visitors read that copy (0 database reads); browsers keep their own copy and only ask
 // "is version X still current?".
 const SNAPSHOT_KEY = 'public:data';
+const SNAPSHOT_FORMAT = 2;   // 2 = nicks only (no short names); an older copy is rebuilt on the next request
 
 /* ---------------- avatars ----------------
    One square image per player (about 320×320, ≤150 KB) in KV under avatar:<player id>.
@@ -606,11 +607,11 @@ async function rebuildSnapshot(env) {
   const body = JSON.stringify({ ...data, players: data.players.map(({ name, ...p }) => p) });
   await env.DB.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('dataVersion', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at").bind(version).run();
   if (env.KV) {
-    try { await env.KV.put(SNAPSHOT_KEY, body, { metadata: { version } }); }
+    try { await env.KV.put(SNAPSHOT_KEY, body, { metadata: { version, format: SNAPSHOT_FORMAT } }); }
     catch (e) {
       // KV allows 1 write per second per key: wait and retry once.
       await new Promise(r => setTimeout(r, 1200));
-      await env.KV.put(SNAPSHOT_KEY, body, { metadata: { version } });
+      await env.KV.put(SNAPSHOT_KEY, body, { metadata: { version, format: SNAPSHOT_FORMAT } });
     }
   }
   return { version, body };
@@ -619,7 +620,7 @@ async function rebuildSnapshot(env) {
 async function publicSnapshot(env) {
   if (env.KV) {
     const { value, metadata } = await env.KV.getWithMetadata(SNAPSHOT_KEY);
-    if (value && metadata && metadata.version) return { version: metadata.version, body: value };
+    if (value && metadata && metadata.version && metadata.format === SNAPSHOT_FORMAT) return { version: metadata.version, body: value };
   }
   return rebuildSnapshot(env);
 }
