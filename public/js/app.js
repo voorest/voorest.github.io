@@ -203,13 +203,15 @@ function loadDemo() {
 
 /* ---------- top bar: login + save status ---------- */
 /** Login area: who you are + Log out, or the login button. Same markup in the top bar and in the phone menu. */
-function authHtml() {
+const ICON_LOGOUT = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M9 20H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h4M16 16l4-4-4-4M20 12H9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+/** Login block. In the side menu (drawer = true) Log out is an icon next to the close button instead. */
+function authHtml(drawer = false) {
   const u = Store.user();
   if (!Store.isLive()) return `<span class="chip muted">${t('local mode')}</span>`;
   if (u) {
     const me = u.playerId ? Store.player(u.playerId) : null;
-    return `<span class="who">${me ? avatar(me) : ''}<span>${h(u.nickname || (u.username ? '@' + u.username : u.name || t('you')))}</span>${u.role === 'admin' ? ` <span class="chip admin">${t('admin')}</span>` : ''}</span>
-      <button class="btn small ghost logout-btn">${t('Log out')}</button>`;
+    return `<span class="who">${me ? avatar(me) : ''}<span>${h(u.nickname || (u.username ? '@' + u.username : u.name || t('you')))}</span>${u.role === 'admin' ? ` <span class="chip admin">${t('admin')}</span>` : ''}</span>`
+      + (drawer ? '' : `<button class="btn small ghost logout-btn">${t('Log out')}</button>`);
   }
   if (Store.devLogin()) return `<a class="btn small" href="/api/auth/dev-login">${t('Dev login')}</a>`;
   if (Store.loginAvailable()) return `<a class="btn small tg" href="/api/auth/telegram/start?back=${encodeURIComponent(location.pathname)}">${t('Log in with Telegram')}</a>`;
@@ -233,9 +235,17 @@ function syncPrivateNav() {
 }
 function renderAuth() {
   syncPrivateNav();
-  const html = authHtml();
-  document.getElementById('auth').innerHTML = html;
-  document.getElementById('drawerAuth').innerHTML = html;
+  document.getElementById('auth').innerHTML = authHtml();
+  document.getElementById('drawerAuth').innerHTML = authHtml(true);
+  // side menu: Log out as an icon left of ✕ (only when logged in)
+  let out = document.getElementById('drawerLogout');
+  if (Store.isLive() && Store.user()) {
+    if (!out) {
+      out = Object.assign(document.createElement('button'), { type: 'button', id: 'drawerLogout', className: 'drawer-close logout-btn', innerHTML: ICON_LOGOUT });
+      document.getElementById('drawerClose').before(out);
+    }
+    out.title = t('Log out'); out.setAttribute('aria-label', t('Log out'));
+  } else if (out) out.remove();
   document.querySelectorAll('.logout-btn').forEach(b => { b.onclick = () => attempt(() => Store.logout()); });
 }
 /* ---------- phone menu (burger → side panel with login on top and the menu items) ---------- */

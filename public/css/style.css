@@ -192,8 +192,8 @@ textarea { width: 100%; resize: vertical; }
 .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
-table.lb th, table.lb td { padding: .3rem .3rem .3rem 0; }   /* leaderboard: tighter, the card already has padding */
-table.lb th:last-child, table.lb td:last-child { padding-right: 0; }
+table.lb th, table.lb td, table.players th, table.players td { padding: .3rem .3rem .3rem 0; }   /* leaderboard + players: tighter, the card already has padding */
+table.lb th:last-child, table.lb td:last-child, table.players th:last-child, table.players td:last-child { padding-right: 0; }
 th { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
 tbody tr:hover { background: rgba(255, 255, 255, .02); }
 th.sortable { cursor: pointer; user-select: none; }
@@ -456,11 +456,12 @@ canvas.crop:active { cursor: grabbing; }
 .drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 61; width: min(320px, 86vw); background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; animation: drawer-in .18s ease-out; }
 .drawer[hidden], .drawer-backdrop[hidden] { display: none; }
 @keyframes drawer-in { from { transform: translateX(100%); } to { transform: none; } }
-.drawer-head { display: flex; align-items: flex-start; gap: .75rem; padding: 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
-.drawer-head .drawer-close { display: block; margin-left: auto; }
-.drawer-auth { display: flex; flex-direction: column; align-items: flex-start; gap: .6rem; min-width: 0; }
+.drawer-head { display: flex; align-items: center; gap: .5rem; padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.drawer-head { justify-content: flex-end; }
+.drawer-head .drawer-close { display: block; flex: none; }
+.drawer-auth { flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: .4rem; min-width: 0; }
 .drawer-auth .who { display: flex; align-items: center; gap: .5rem; font-weight: 600; }
-.drawer-auth .who .ava { width: 36px; height: 36px; }
+.drawer-auth .who .ava { width: 32px; height: 32px; }
 .drawer-nav { display: flex; flex-direction: column; padding: 8px; }
 .drawer-nav a { color: var(--text); padding: .8rem .9rem; border-radius: 8px; font-size: 1.02rem; }
 .drawer-nav a:hover { background: var(--surface-2); text-decoration: none; }
@@ -469,7 +470,7 @@ body.menu-open { overflow: hidden; }
 .drawer-sec { padding: .9rem .9rem .3rem; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .drawer-sec:first-child { padding-top: .4rem; }
 body.with-admin-menu .menu-btn { display: block; }   /* desktop: the admin pages are in the side menu */
-@media (min-width: 761px) { .drawer-auth { display: none; } }   /* the header already shows the login */
+@media (min-width: 761px) { .drawer-auth, #drawerLogout { display: none; } }   /* the header already shows the login and Log out */
 .btn.icon-only { padding: .35rem; line-height: 0; }
 .actions { white-space: nowrap; }
 @media (max-width: 760px) {
