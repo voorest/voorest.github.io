@@ -118,7 +118,7 @@ export async function seoPage(request, env, url, snapshotKey) {
   ].filter(Boolean).join('\n  ');
   const out = html
     .replace(/<html lang="[^"]*">/, `<html lang="${lang}">`)
-    .replace(/<!-- seo -->[\s\S]*?<!-- \/seo -->/, `<!-- seo -->\n  ${tags}\n  <!-- /seo -->`);
+    .replace(/<!-- seo -->[\s\S]*?<!-- \/seo -->/, tags);   // the markers themselves are not sent
   const headers = new Headers(res.headers);
   headers.set('content-type', 'text/html; charset=utf-8');
   headers.delete('content-length');

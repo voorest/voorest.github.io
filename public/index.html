@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!-- seo --><!-- the Worker replaces this block with the page's own title, description and preview tags (src/seo.js) -->
+  <!-- seo -->
   <title>Mafia BCN — Мафія в Барселоні: статистика, рейтинг, титули</title>
   <meta name="description" content="Mafia BCN — україномовна спільнота гри в Мафію в Барселоні. Результати всіх ігор, чесний рейтинг гравців, титули, ролі та особиста статистика.">
   <!-- /seo -->
@@ -23,13 +23,11 @@
       <a href="/games" data-route="games" data-i18n="Games">Games</a>
       <a href="/players" data-route="players" data-i18n="Players">Players</a>
       <a href="/compare" data-route="compare" data-i18n="Compare">Compare</a>
-      <!-- Data, Settings, Bot and My stats are added by app.js only for people who may use them -->
     </nav>
     <div class="spacer"></div>
     <span id="saveState" class="save-state" aria-live="polite"></span>
     <div class="lang-switch" role="group" aria-label="Language"><button type="button" data-lang="uk">UA</button><button type="button" data-lang="en">EN</button></div>
     <div id="auth" class="auth"></div>
-    <!-- phones: the menu and the login live in a side panel opened by this button -->
     <button type="button" class="menu-btn" id="menuBtn" aria-controls="drawer" aria-expanded="false" aria-label="Menu" data-i18n-label="Menu">
       <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
     </button>
@@ -55,7 +53,6 @@
   <footer class="site-foot"><a href="/about" data-i18n="About Mafia BCN">About Mafia BCN</a><span>·</span><a href="https://t.me/mafia_bcn_bot" target="_blank" rel="noopener">@mafia_bcn_bot</a></footer>
   <div id="toast" role="status" aria-live="polite"></div>
 
-  <!-- Plain scripts (no build step) so the site also works by double-clicking index.html -->
   <script src="/js/i18n.js"></script>
   <script src="/js/lang/uk.js"></script>
   <script src="/js/data.js"></script>
