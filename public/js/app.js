@@ -212,9 +212,26 @@ function authHtml() {
   if (Store.loginAvailable()) return `<a class="btn small tg" href="/api/auth/telegram/start?back=${encodeURIComponent(location.pathname)}">${t('Log in with Telegram')}</a>`;
   return '';
 }
+/* Links that only some people may use are not in index.html, so crawlers never find them;
+   they are added here once we know who is looking (local mode keeps Data and Settings for editing). */
+const PRIVATE_NAV = [
+  { route: 'data', label: 'Data', show: () => Store.canEdit() },
+  { route: 'settings', label: 'Settings', show: () => Store.canEdit() },
+  { route: 'bot', label: 'Bot', show: () => Store.isAdmin() },
+  { route: 'me', label: 'My stats', show: () => { const u = Store.user(); return !!(u && u.playerId); } },
+];
+function syncPrivateNav() {
+  const nav = document.getElementById('nav');
+  PRIVATE_NAV.forEach(it => {
+    let a = nav.querySelector(`a[data-route="${it.route}"]`);
+    if (!it.show()) { if (a) a.remove(); return; }
+    if (!a) { a = document.createElement('a'); a.href = '/' + it.route; a.dataset.route = it.route; a.dataset.i18n = it.label; }
+    a.textContent = t(it.label);
+    nav.append(a);   // keeps the order above
+  });
+}
 function renderAuth() {
-  const u = Store.user();
-  document.getElementById('navMe').hidden = !(u && u.playerId);
+  syncPrivateNav();
   const html = authHtml();
   document.getElementById('auth').innerHTML = html;
   document.getElementById('drawerAuth').innerHTML = html;
@@ -254,6 +271,7 @@ function route() {
     id = g ? g.id : '-';
   }
   if (view === 'player' && id) { const p = Store.playerByNumber(id); id = p ? p.id : '-'; }
+  syncPrivateNav();   // before marking the active link
   const navKey = { game: 'games', player: 'players' }[view] || view;
   document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('active', a.dataset.route === navKey));
   const db = Store.get();
@@ -271,8 +289,6 @@ function route() {
   renderAuth();
   // Data and Settings are for the admin only (in local mode they stay available for editing).
   const adminPages = Store.canEdit();
-  document.querySelectorAll('#nav [data-admin]').forEach(a => { a.hidden = !adminPages; });
-  document.querySelectorAll('#nav [data-admin-live]').forEach(a => { a.hidden = !Store.isAdmin(); });
   setMenu(false);
   renderMenu();
   if ((!adminPages && (view === 'data' || view === 'settings')) || (view === 'bot' && !Store.isAdmin())) { go('/dashboard', { replace: true }); return; }
