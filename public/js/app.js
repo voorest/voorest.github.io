@@ -1088,20 +1088,20 @@ function viewPlayers() {
     { key: 'nickname', label: t('Player'), get: p => fullName(p).toLowerCase() },
     ...statCols,
   ];
-  const nCols = cols.length + (adminLive ? 2 : 0) + (edit ? 1 : 0);
+  const nCols = 1 + cols.length + (adminLive ? 2 : 0) + (edit ? 1 : 0);   // 1 = the # (place in the current order)
   const { dir } = UI.plSort;
   // visitors don't see No., so their default order is by rating
   const col = cols.find(c => c.key === UI.plSort.key) || cols.find(c => c.key === 'rating');
   const key = col.key;
   const list = [...db.players].sort((a, b) => { const va = col.get(a), vb = col.get(b); return va < vb ? -dir : va > vb ? dir : a.number - b.number; });
 
-  const row = p => {
+  const row = (p, i) => {
     const s = byId[p.id];
     const pv = priv[p.id] || {};
     const tg = tgFor(p.id);
     if (UI.editingPlayer === p.id) {
       const pre = tg.find(a => !a.linked) || tg[0];
-      return `<tr class="editing"><td class="muted">${p.number}</td><td colspan="${nCols - 1}">
+      return `<tr class="editing"><td class="muted">${i + 1}</td><td colspan="${nCols - 1}">
         <form class="edit-player row gap wrap" data-id="${p.id}">
           <label class="field"><span>${t('Name (short, e.g. Tania)')}</span><input name="name" value="${h(p.name || '')}" maxlength="40"></label>
           <label class="field"><span>${t('Nick (public, unique)')}</span><input name="nickname" value="${h(p.nickname)}" required maxlength="60"></label>
@@ -1114,6 +1114,7 @@ function viewPlayers() {
         </form></td></tr>`;
     }
     return `<tr data-name="${h((fullName(p) + ' ' + (pv.first_name || '') + ' ' + (pv.last_name || '') + ' ' + tg.map(a => a.username).join(' ')).toLowerCase())}">
+      <td class="muted">${i + 1}</td>
       ${edit ? `<td class="muted">${p.number}</td>` : ''}
       <td class="who-cell"><a href="${playerHref(p)}">${avatar(p)}<span>${h(fullName(p))}</span></a></td>
       ${adminLive ? `<td>${h([pv.first_name, pv.last_name].filter(Boolean).join(' ')) || '<span class="muted">—</span>'}</td>
@@ -1147,6 +1148,7 @@ function viewPlayers() {
       <div class="table-wrap">
         <table class="players">
           <thead><tr>
+            <th title="${t('Place in the current order')}">#</th>
             ${cols.slice(0, edit ? 2 : 1).map(c => sortHead(c, key, dir)).join('')}
             ${adminLive ? `<th>${t('Real name')}</th><th>Telegram</th>` : ''}
             ${cols.slice(edit ? 2 : 1).map(c => sortHead(c, key, dir)).join('')}

@@ -62,6 +62,7 @@ I18N.dict.uk = {
   "Save": "Зберегти",
   "Edit": "Редагувати",
   "Site": "Сайт",
+  "Place in the current order": "Місце в поточному сортуванні",
   "Admin": "Адмін",
   "Delete": "Видалити",
   "Remove": "Прибрати",
