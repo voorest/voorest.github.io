@@ -1677,26 +1677,30 @@ function viewSettings() {
    BOT — posts to the Telegram group / subscribers, history with edit & delete
    ============================================================ */
 /* Telegram texts are always in Ukrainian, whatever language the site is shown in. */
-const UK_ROLE_LINES = [['don', 'Дон'], ['mafia', 'Мафія'], ['sheriff', 'Шериф'], ['doctor', 'Лікар'], ['maniac', 'Маніяк'], ['citizen', 'Мирні']];
-/** One game as text lines: header with the result circle, then players by role. Reused by the day stats post. */
+/* Short format (agreed 31 Oct 2026): nicks only, roles as emoji, " | " between groups,
+   links written as [text](address) and sent as clickable words (see postHtml). Citizens are not listed. */
+const UK_ROLE_ICONS = { don: '🎩', mafia: '🔫', sheriff: '⭐', doctor: '🩺', maniac: '🔪' };
+const tgLink = (text, url) => `[${text}](${url})`;
+const resultUk = w => (w === 'town' ? 'перемога мирних' : w === 'mafia' ? 'перемога мафії' : 'не завершена');
+const resultDot = w => (w === 'town' ? '🔴' : w === 'mafia' ? '⚫' : '⏳');
+/** One game: "🔴 Гра 3 — перемога мирних" (linked), then the mafia line and the active citizen roles line. */
 function gameBlockUk(g) {
-  const result = g.winner === 'town' ? 'перемога мирних 🔴' : g.winner === 'mafia' ? 'перемога мафії ⚫' : 'не завершена';
-  const lines = [`Гра #${g.number} — ${result}`];
-  for (const [role, label] of UK_ROLE_LINES) {
-    const names = g.seats.filter(s => s.role === role && s.playerId).map(s => Store.playerName(s.playerId));
-    if (names.length) lines.push(`${label}: ${names.join(', ')}`);
+  const part = role => {
+    const nicks = g.seats.filter(s => s.role === role && s.playerId).map(s => Store.playerNick(s.playerId));
+    return nicks.length ? `${UK_ROLE_ICONS[role]} ${nicks.join(', ')}` : '';
+  };
+  const lines = [`${resultDot(g.winner)} ${tgLink(`Гра ${g.number}`, location.origin + gameHref(g))} — ${resultUk(g.winner)}`];
+  for (const roles of [['don', 'mafia'], ['sheriff', 'doctor', 'maniac']]) {
+    const line = roles.map(part).filter(Boolean).join(' | ');
+    if (line) lines.push(line);
   }
   return lines;
 }
 function gameSummaryText(g) {
-  return [
-    `Mafia BCN · ${isoToDmy(g.date)}`,
-    '',
-    ...gameBlockUk(g),
-    '',
-    `Деталі гри: ${location.origin}${gameHref(g)}`,
-  ].join('\n');
+  return [`${tgLink('Mafia BCN', location.origin)} | ${isoToDmy(g.date)}`, ...gameBlockUk(g)].join('\n');
 }
+/** Post text as HTML for the page (preview, history): escaped, [text](https://…) shown as a link. */
+const postHtml = text => h(text).replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (m, label, url) => `<a href="${url}" target="_blank" rel="noopener">${label}</a>`);
 
 /** All finished games of one day as a Telegram post (the agreed "day stats" format). */
 function dayStatsText(date) {
@@ -1704,10 +1708,10 @@ function dayStatsText(date) {
   const games = db.games.filter(g => g.date === date && g.winner).sort((a, b) => a.number - b.number);
   if (!games.length) return '';
   const town = games.filter(g => g.winner === 'town').length;
-  const out = [`Mafia BCN · ${isoToDmy(date)}`, `Ігор: ${games.length} · Мирні ${town} : ${games.length - town} Мафія`, ''];
+  const out = [`${tgLink('Mafia BCN', location.origin)} | ${isoToDmy(date)}`, `Мирні ${town} : ${games.length - town} Мафія`, ''];
   games.forEach(g => out.push(...gameBlockUk(g), ''));
 
-  // Best players of the day: everyone who won all their games that day
+  // Everyone who won all their games that day
   const day = {};
   games.forEach(g => g.seats.forEach(s => {
     if (!s.playerId || !s.role) return;
@@ -1715,40 +1719,34 @@ function dayStatsText(date) {
     d.g++; if (ROLES[s.role].team === g.winner) d.w++;
   }));
   const best = Object.entries(day).filter(([, d]) => d.w === d.g).sort((a, b) => b[1].g - a[1].g);
-  if (best.length) out.push('Найкращі гравці дня (100% перемог)', best.map(([id, d]) => `${Store.playerName(id)} ${d.w}/${d.g}`).join(' · '), '');
 
   // Rating before this day vs after it (later games are left out, so an old day reads the same later)
   const before = Stats.compute({ ...db, games: db.games.filter(g => g.date < date) });
   const after = Stats.compute({ ...db, games: db.games.filter(g => g.date <= date) });
   const was = Object.fromEntries(before.players.map(p => [p.id, p]));
   const pts = x => Math.round(x * 100);
-  const moves = after.players.filter(p => day[p.id] && was[p.id]).map(p => ({ p, from: pts(was[p.id].rating), to: pts(p.rating) }))
-    .map(m => ({ ...m, d: m.to - m.from })).filter(m => m.d !== 0);
+  const moves = after.players.filter(p => day[p.id] && was[p.id]).map(p => ({ p, d: pts(p.rating) - pts(was[p.id].rating) })).filter(m => m.d !== 0);
   const ups = moves.filter(m => m.d > 0).sort((a, b) => b.d - a.d).slice(0, 3);
   const downs = moves.filter(m => m.d < 0).sort((a, b) => a.d - b.d).slice(0, 3);
   const newbies = after.players.filter(p => day[p.id] && !was[p.id]);
-  if (ups.length || downs.length || newbies.length) {
-    out.push('Зміна рейтингу');
-    [...ups, ...downs].forEach(m => out.push(`${m.p.name}: ${m.from}% → ${m.to}% (${m.d > 0 ? '+' : '−'}${Math.abs(m.d)})`));
-    if (newbies.length) out.push(`Нові гравці: ${newbies.map(p => `${p.name} ${pts(p.rating)}%`).join(', ')}`);
-    out.push('');
-  }
+  const facts = [
+    best.length && `🏆 Без поразок: ${best.map(([id, d]) => `${Store.playerNick(id)} ${d.w}/${d.g}`).join(' | ')}`,
+    ups.length && `📈 ${ups.map(m => `${m.p.nick} +${m.d}`).join(' | ')}`,
+    downs.length && `📉 ${downs.map(m => `${m.p.nick} −${-m.d}`).join(' | ')}`,
+    newbies.length && `🆕 Нові: ${newbies.map(p => p.nick).join(' | ')}`,
+  ].filter(Boolean);
+  if (facts.length) out.push(...facts, '');
 
-  // Top 5 among players with enough games, with places gained/lost since before the day
+  // Top 3 among players with enough games, with places gained/lost since before the day
   const minG = +db.settings.minGames || 3;
   const rank = st => st.players.filter(p => p.games >= minG).sort((a, b) => b.rating - a.rating);
   const oldPlace = Object.fromEntries(rank(before).map((p, i) => [p.id, i + 1]));
-  const top = rank(after).slice(0, 5);
+  const top = rank(after).slice(0, 3);
   if (top.length) {
-    out.push(`Топ-5 (від ${minG} ігор)`);
-    top.forEach((p, i) => {
-      const o = oldPlace[p.id];
-      const mark = !o ? ' нов.' : o > i + 1 ? ` ↑${o - i - 1}` : o < i + 1 ? ` ↓${i + 1 - o}` : '';
-      out.push(`${i + 1}. ${p.name} — ${pts(p.rating)}%${mark}`);
-    });
-    out.push('');
+    const mark = (p, i) => { const o = oldPlace[p.id]; return !o ? ' нов.' : o > i + 1 ? ` ↑${o - i - 1}` : o < i + 1 ? ` ↓${i + 1 - o}` : ''; };
+    out.push(`🏅 Топ-3 (від ${minG} ігор): ${top.map((p, i) => `${i + 1}. ${p.nick} ${pts(p.rating)}%${mark(p, i)}`).join(' | ')}`, '');
   }
-  out.push(`Уся статистика: ${location.origin}`, 'Твоя статистика: /mystats у @mafia_bcn_bot');
+  out.push('📊 Твоя статистика: /mystats у @mafia_bcn_bot');
   return out.join('\n');
 }
 
@@ -1842,7 +1840,8 @@ async function viewBot({ refresh = false } = {}) {
           ${BOT_TEMPLATES.map(tp => `<button class="btn small ghost" data-tpl="${tp.key}">${t(tp.label)}</button>`).join('')}
           <label class="field inline"><span>${t('Game day')}</span><select id="tplDay">${days.map(d => `<option value="${d}">${isoToDmy(d)}</option>`).join('') || '<option value="">—</option>'}</select></label>
         </div>
-        <textarea id="botText" rows="12" maxlength="4000" placeholder="${t('Write your message… (plain text, emojis welcome)')}">${h(draft.text || '')}</textarea>
+        <textarea id="botText" rows="12" maxlength="4000" placeholder="${t('Write your message… Links: [text](address)')}">${h(draft.text || '')}</textarea>
+        <div class="tg-bubble post-preview" id="botPreview" title="${t('How it will look in Telegram')}"></div>
         <div class="row gap wrap"><span class="muted small" id="botCount"></span><span class="spacer"></span><button class="btn primary" id="botSend">${t('Send')}</button></div>
       </section>
     </div>
@@ -1877,7 +1876,11 @@ async function viewBot({ refresh = false } = {}) {
 
   /* ---- compose ---- */
   const text = $('#botText');
-  const count = () => { $('#botCount').textContent = `${text.value.length} / 4000`; };
+  const count = () => {
+    $('#botCount').textContent = `${text.value.length} / 4000`;
+    $('#botPreview').innerHTML = postHtml(text.value);
+    $('#botPreview').hidden = !text.value.trim();
+  };
   text.oninput = count; count();
   const loadChats = async () => { if (!T.chats) T.chats = (await Store.bot.chats()).chats; return T.chats; };
   const syncAudience = () => attempt(async () => {
@@ -1972,7 +1975,7 @@ async function viewBot({ refresh = false } = {}) {
           <span class="spacer"></span>
           <span class="muted small">✓ ${p.sent} ${t('sent')}${p.failed ? ` · ✗ ${p.failed} ${t('failed')}` : ''}${p.pending ? ` · ${p.pending} ${t('waiting')}` : ''}${p.deleted ? ` · 🗑 ${p.deleted}` : ''}</span>
         </div>
-        <div class="post-text">${h(p.text)}</div>
+        <div class="post-text">${postHtml(p.text)}</div>
         ${p.errors ? `<p class="muted small warn-text">${h(p.errors)}</p>` : ''}
         ${p.deleted_at ? '' : `<div class="row gap">
           ${p.pending ? `<button class="btn small" data-continue="${p.id}">${t('Continue sending')}</button>` : ''}

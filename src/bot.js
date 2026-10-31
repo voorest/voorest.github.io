@@ -34,6 +34,11 @@ export function displayName(p) {
 
 const escHtml = t => String(t ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
+/** Post text → Telegram HTML: everything is escaped, [text](https://…) becomes a clickable word. */
+export function postHtml(text) {
+  return escHtml(text).replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (m, label, url) => `<a href="${url.replace(/"/g, '&quot;')}">${label}</a>`);
+}
+
 export async function tg(env, method, payload) {
   if (!env.TELEGRAM_BOT_TOKEN) return { ok: false, description: 'TELEGRAM_BOT_TOKEN is not set' };
   const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, {
@@ -366,14 +371,14 @@ export async function processPost(env, id) {
       .bind(state, messageId ?? null, error ?? null, id, chatId));
   for (const row of results) {
     if (row.state === 'pending') {
-      const r = await tg(env, 'sendMessage', { chat_id: row.chat_id, text: post.text, disable_web_page_preview: true });
+      const r = await tg(env, 'sendMessage', { chat_id: row.chat_id, text: postHtml(post.text), parse_mode: 'HTML', disable_web_page_preview: true });
       if (r.ok) upd(row.chat_id, 'sent', r.result.message_id, null);
       else {
         upd(row.chat_id, 'failed', null, r.description || 'failed');
         if (r.error_code === 403) updates.push(env.DB.prepare("UPDATE bot_chats SET status = 'blocked', updated_at = datetime('now') WHERE chat_id = ?").bind(row.chat_id));
       }
     } else if (row.state === 'pending_edit') {
-      const r = await tg(env, 'editMessageText', { chat_id: row.chat_id, message_id: row.message_id, text: post.text, disable_web_page_preview: true });
+      const r = await tg(env, 'editMessageText', { chat_id: row.chat_id, message_id: row.message_id, text: postHtml(post.text), parse_mode: 'HTML', disable_web_page_preview: true });
       const ok = r.ok || /not modified/i.test(r.description || '');
       upd(row.chat_id, 'sent', null, ok ? null : 'edit: ' + (r.description || 'failed'));
     } else if (row.state === 'pending_delete') {
