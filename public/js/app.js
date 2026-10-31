@@ -76,6 +76,8 @@ function avatar(p, large = false) {
   return ICON_HTML(cls, g);
 }
 /** Default picture: the man / woman icon when gender is set, otherwise the neutral hat. */
+const ICON_EDIT = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>';
+const ICON_DELETE = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 function ICON_HTML(cls, g) {
   if (g === 'm' || g === 'f') return `<span class="${cls} ava-icon"><img src="/images/mafia-${g === 'm' ? 'man' : 'woman'}.svg" alt=""></span>`;
   return `<span class="${cls} ava-hat">${HAT_SVG}</span>`;
@@ -213,23 +215,21 @@ function authHtml() {
   if (Store.loginAvailable()) return `<a class="btn small tg" href="/api/auth/telegram/start?back=${encodeURIComponent(location.pathname)}">${t('Log in with Telegram')}</a>`;
   return '';
 }
-/* Links that only some people may use are not in index.html, so crawlers never find them;
-   they are added here once we know who is looking (local mode keeps Data and Settings for editing). */
-const PRIVATE_NAV = [
+/* Links that only some people may use are not in index.html, so crawlers never find them; they are added
+   once we know who is looking. "My stats" (members) goes into the top menu; the admin pages (local mode keeps
+   Data and Settings for editing) live only in the side menu, which the burger opens on desktop too. */
+const ADMIN_NAV = [
   { route: 'data', label: 'Data', show: () => Store.canEdit() },
   { route: 'settings', label: 'Settings', show: () => Store.canEdit() },
   { route: 'bot', label: 'Bot', show: () => Store.isAdmin() },
-  { route: 'me', label: 'My stats', show: () => { const u = Store.user(); return !!(u && u.playerId); } },
 ];
 function syncPrivateNav() {
   const nav = document.getElementById('nav');
-  PRIVATE_NAV.forEach(it => {
-    let a = nav.querySelector(`a[data-route="${it.route}"]`);
-    if (!it.show()) { if (a) a.remove(); return; }
-    if (!a) { a = document.createElement('a'); a.href = '/' + it.route; a.dataset.route = it.route; a.dataset.i18n = it.label; }
-    a.textContent = t(it.label);
-    nav.append(a);   // keeps the order above
-  });
+  const u = Store.user();
+  let me = nav.querySelector('a[data-route="me"]');
+  if (!(u && u.playerId)) { if (me) me.remove(); return; }
+  if (!me) { me = document.createElement('a'); me.href = '/me'; me.dataset.route = 'me'; me.dataset.i18n = 'My stats'; nav.append(me); }
+  me.textContent = t('My stats');
 }
 function renderAuth() {
   syncPrivateNav();
@@ -239,10 +239,15 @@ function renderAuth() {
   document.querySelectorAll('.logout-btn').forEach(b => { b.onclick = () => attempt(() => Store.logout()); });
 }
 /* ---------- phone menu (burger → side panel with login on top and the menu items) ---------- */
+/** Side menu: the site's pages, then (for the admin) the admin pages. The burger shows on desktop only when there are admin pages. */
 function renderMenu() {
-  document.getElementById('drawerNav').innerHTML = [...document.querySelectorAll('#nav a')].filter(a => !a.hidden)
-    .map(a => `<a href="${a.getAttribute('href')}" class="${a.classList.contains('active') ? 'active' : ''}">${h(a.textContent)}</a>`).join('')
-    + `<a href="/about" class="${location.pathname === '/about' ? 'active' : ''}">${t('About Mafia BCN')}</a>`;
+  const link = (href, text, on) => `<a href="${href}" class="${on ? 'active' : ''}">${h(text)}</a>`;
+  const site = [...document.querySelectorAll('#nav a')].map(a => link(a.getAttribute('href'), a.textContent, a.classList.contains('active')))
+    .concat(link('/about', t('About Mafia BCN'), location.pathname === '/about'));
+  const admin = ADMIN_NAV.filter(it => it.show()).map(it => link('/' + it.route, t(it.label), location.pathname.split('/')[1] === it.route));
+  document.getElementById('drawerNav').innerHTML = `<div class="drawer-sec">${t('Site')}</div>${site.join('')}`
+    + (admin.length ? `<div class="drawer-sec">${t('Admin')}</div>${admin.join('')}` : '');
+  document.body.classList.toggle('with-admin-menu', admin.length > 0);
 }
 function setMenu(open) {
   const drawer = document.getElementById('drawer'), back = document.getElementById('drawerBackdrop'), btn = document.getElementById('menuBtn');
@@ -1102,7 +1107,7 @@ function viewPlayers() {
       <td>${s ? s.wins : 0}</td>
       <td>${s ? pct(s.rating) : '—'}</td>
       <td>${s && s.lastPlayed ? fmtDate(s.lastPlayed) : '—'}</td>
-      ${edit ? `<td class="actions"><button class="btn small ghost" data-edit="${p.id}">${t('Edit')}</button><button class="btn small ghost danger-text" data-del="${p.id}">${t('Delete')}</button></td>` : ''}
+      ${edit ? `<td class="actions"><button class="btn small ghost icon-only" data-edit="${p.id}" title="${t('Edit')}" aria-label="${t('Edit')}">${ICON_EDIT}</button><button class="btn small ghost icon-only danger-text" data-del="${p.id}" title="${t('Delete')}" aria-label="${t('Delete')}">${ICON_DELETE}</button></td>` : ''}
     </tr>`;
   };
 
@@ -1140,10 +1145,10 @@ function viewPlayers() {
         <button class="btn small ghost" id="tgPhotos" title="${t('Take profile photos from Telegram for linked players who have none yet')}">📷 ${t('Load Telegram photos')}</button></div>
       <p class="muted small">${t('Everyone who has logged in. Link an account to a player so they see “My stats”; make someone admin if they should help with data.')}</p>
       <div class="table-wrap"><table>
-        <thead><tr><th>Telegram</th><th>${t('Last login')}</th><th>${t('Player')}</th><th>${t('Role')}</th></tr></thead>
+        <thead><tr><th>Telegram</th><th title="${t('Last login on the website (UTC). Pressing Start in the bot is not a website login.')}">${t('Last site login')}</th><th>${t('Player')}</th><th>${t('Role')}</th></tr></thead>
         <tbody>${loggedIn.map(a => `<tr>
           <td>${h(a.display_name || '')} ${a.username ? `<span class="muted">@${h(a.username)}</span>` : ''}</td>
-          <td class="muted">${a.last_login_at ? h(a.last_login_at.slice(0, 16)) : '—'}</td>
+          <td class="muted">${a.last_login_at ? h(a.last_login_at.slice(0, 16)) : a.bot ? t('bot only') : '—'}</td>
           <td><select data-acc-player="${a.id}"><option value="">${t('— not linked —')}</option>${[...db.players].sort((x, y) => fullName(x).localeCompare(fullName(y))).map(p => `<option value="${p.id}" ${a.player_id === p.id ? 'selected' : ''}>${h(fullName(p))}</option>`).join('')}</select></td>
           <td>${String(a.id) === String((Store.user() || {}).accountId)
             ? `<span class="chip admin" title="${t('Your own admin role can’t be removed here (protection against locking yourself out)')}">${t('admin · you')}</span>`
@@ -1771,13 +1776,7 @@ function dayStatsText(date) {
 const BOT_TEMPLATES = [   // labels are translated where shown
   { key: 'day', label: 'Day stats', kind: 'day', make: day => dayStatsText(day) || null },
   { key: 'last', label: 'Last game', kind: 'game', make: () => { const g = Store.sortedGames().find(x => x.winner); return g ? gameSummaryText(g) : null; } },
-  { key: 'announce', label: 'Game night', kind: 'announcement', make: () => `🎭 Mafia BCN — у неділю о 19:00\n📍 Місце: …\n\nХто з нами? Відповідайте тут 👇` },
-  { key: 'reminder', label: 'Reminder', kind: 'announcement', make: () => `⏰ Нагадування: сьогодні граємо в Мафію!\n🕖 Початок о 19:00\n📍 Місце: …\n\nЯкщо не зможете прийти, напишіть, будь ласка 🙏` },
-  { key: 'mystats', label: '/mystats how-to', kind: 'update', make: () => `📊 Новинка: ваша особиста статистика в нашому боті!\n\n1. Відкрийте @mafia_bcn_bot і натисніть Start\n2. Надішліть /mystats — бот покаже ваші ігри, перемоги, рейтинг і місце\n\nЯкщо бот пише, що ви ще не прив'язані, напишіть мені (@voorest), і я прив'яжу ваш Telegram до вашого гравця.\n\n🌐 ${location.origin}` },
-  { key: 'welcome', label: 'Welcome', kind: 'personal', make: () => `👋 Вітаємо в Mafia BCN!\n\nУся статистика наших ігор: ${location.origin}\nВаша особиста статистика: /mystats у @mafia_bcn_bot (натисніть Start)\n\nДо зустрічі за столом! 🎭` },
-  { key: 'update', label: 'Site update', kind: 'update', make: () => `🆕 Оновлення сайту\n\n• …\n\n🌐 ${location.origin}` },
 ];
-const BOT_KINDS = { announcement: 'Announcement', game: 'Game summary', day: 'Day stats', update: 'Update', personal: 'Personal' };
 const BOT_COMMANDS = [
   { cmd: '/start', desc: 'Subscribe to announcements; links the player by @username' },
   { cmd: '/mystats', desc: 'Personal stats (linked players only)' },
@@ -1848,9 +1847,6 @@ async function viewBot({ refresh = false } = {}) {
             </select>
           </label>
           <label class="field" id="personField" hidden><span>${t('Person')}</span><select id="botPerson"><option value="">${t('Loading…')}</option></select></label>
-          <label class="field"><span>${t('Type')}</span>
-            <select id="botKind">${Object.entries(BOT_KINDS).map(([k, l]) => `<option value="${k}" ${draft.kind === k ? 'selected' : ''}>${t(l)}</option>`).join('')}</select>
-          </label>
         </div>
         <div class="row gap wrap tpl-row">
           <span class="lbl">${t('Templates')}</span>
@@ -1918,7 +1914,7 @@ async function viewBot({ refresh = false } = {}) {
     if (!val) { toast(t('No finished games for this template yet')); return; }
     if (text.value.trim() && !confirm(t('Replace the current text with the template?'))) return;
     text.value = val; count();
-    $('#botKind').value = tp.kind;
+    draft.kind = tp.kind;   // stored with the post (day / game), not shown
   });
   $('#botSetup').onclick = () => attempt(async () => { C.status = await Store.bot.setup(); toast(t('Bot connected')); viewBot(); });
   $('#statusRefresh').onclick = () => viewBot({ refresh: true });
@@ -1940,7 +1936,7 @@ async function viewBot({ refresh = false } = {}) {
     if (!text.value.trim()) throw new Error(t('The message is empty'));
     if (!confirm(t('Send this message to {who}?', { who }))) return;
     $('#botSend').disabled = true;
-    const r = await Store.bot.send({ text: text.value, audience, chatId, kind: $('#botKind').value, gameId: draft.gameId || null });
+    const r = await Store.bot.send({ text: text.value, audience, chatId, kind: draft.kind || 'announcement', gameId: draft.gameId || null });
     if (r.remaining) await drain(r.id, t('Sending'));
     UI.botDraft = null;
     text.value = ''; count();
@@ -1986,7 +1982,6 @@ async function viewBot({ refresh = false } = {}) {
         <div class="row gap wrap post-head">
           <b>${fmtWhen(p.created_at)}</b>
           <span class="chip">${h(audienceLabel(p))}</span>
-          <span class="chip muted">${h(BOT_KINDS[p.kind] ? t(BOT_KINDS[p.kind]) : p.kind)}</span>
           ${p.deleted_at ? `<span class="chip loss">${t('deleted')}</span>` : ''}
           ${p.edited_at ? `<span class="muted small">${t('edited')} ${fmtWhen(p.edited_at)}</span>` : ''}
           <span class="spacer"></span>

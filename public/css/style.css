@@ -120,6 +120,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid rgba(214, 165, 72
 input[type="date"] { color-scheme: dark; }
 textarea { width: 100%; resize: vertical; }
 .field { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; color: var(--muted); }
+.field[hidden] { display: none; }
 .field.inline { flex-direction: row; align-items: center; gap: .4rem; }
 .field.block { margin-top: 1rem; }
 .num-input { width: 4.5rem; }
@@ -463,6 +464,12 @@ canvas.crop:active { cursor: grabbing; }
 .drawer-nav a:hover { background: var(--surface-2); text-decoration: none; }
 .drawer-nav a.active { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--accent); }
 body.menu-open { overflow: hidden; }
+.drawer-sec { padding: .9rem .9rem .3rem; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.drawer-sec:first-child { padding-top: .4rem; }
+body.with-admin-menu .menu-btn { display: block; }   /* desktop: the admin pages are in the side menu */
+@media (min-width: 761px) { .drawer-auth { display: none; } }   /* the header already shows the login */
+.btn.icon-only { padding: .35rem; line-height: 0; }
+.actions { white-space: nowrap; }
 @media (max-width: 760px) {
   .topbar { flex-wrap: nowrap; }
   .topbar nav, .topbar .auth { display: none; }
