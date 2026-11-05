@@ -1,0 +1,16 @@
+(not (
+  http.request.uri.path in {"/" "/index.html" "/dashboard" "/games" "/players" "/compare" "/about" "/data" "/settings" "/bot" "/me" "/robots.txt" "/sitemap.xml" "/favicon.ico" "/favicon-16x16.png" "/favicon-32x32.png" "/android-chrome-192x192.png" "/android-chrome-512x512.png" "/site.webmanifest" "/api/data" "/api/health" "/api/me" "/api/telegram/webhook"}
+  or (starts_with(http.request.uri.path, "/js/") and ends_with(http.request.uri.path, ".js"))
+  or (starts_with(http.request.uri.path, "/css/") and ends_with(http.request.uri.path, ".css"))
+  or (starts_with(http.request.uri.path, "/images/") and (ends_with(http.request.uri.path, ".png") or ends_with(http.request.uri.path, ".svg")))
+  or ((starts_with(http.request.uri.path, "/game/") or starts_with(http.request.uri.path, "/player/") or starts_with(http.request.uri.path, "/compare/")) and not (http.request.uri.path contains "."))
+  or starts_with(http.request.uri.path, "/login-error/")
+  or starts_with(http.request.uri.path, "/apple-touch-icon")
+  or starts_with(http.request.uri.path, "/cdn-cgi/")
+  or starts_with(http.request.uri.path, "/api/me/")
+  or starts_with(http.request.uri.path, "/api/avatar/")
+  or starts_with(http.request.uri.path, "/api/auth/")
+  or starts_with(http.request.uri.path, "/api/admin/")
+))
+or (not (http.request.method in {"GET" "HEAD"}) and not starts_with(http.request.uri.path, "/api/"))
+or (http.request.uri.path contains ".php")

@@ -33,6 +33,22 @@ git push origin dev     # does NOT deploy
 git checkout master && git merge dev && git push   # deploys
 ```
 
+## Cloudflare firewall rule (read before adding pages or files)
+
+The site sits behind a Cloudflare WAF custom rule, **"Block scanners"** (dashboard → mafiabcn.com → Security → WAF → Custom rules, action *Block*).
+It is an **allowlist**: every address that is not one of our pages, files or API paths is blocked before it reaches the Worker. This stops the bots that probe for `.env`, `.git`, `wp-admin`, `*.php` and the like.
+
+The exact expression is kept in [`cloudflare/waf-block-scanners.txt`](cloudflare/waf-block-scanners.txt). It is set by hand in the dashboard, so the file and the dashboard must be kept the same.
+
+**Update the rule (file + dashboard) before releasing** when you add:
+- a new page address (a new first part such as `/stats`, or a new pattern under `/game/`, `/player/`, `/compare/` that contains a dot);
+- a new file in the root of `public/`, a new folder in `public/`, or a new file type in `js/`, `css/` or `images/` (only `.js`, `.css`, `.png` and `.svg` are allowed there now);
+- a new `/api/…` branch that is not under `/api/me/`, `/api/avatar/`, `/api/auth/` or `/api/admin/`;
+- a POST/PATCH/DELETE outside `/api/` (all of them are blocked).
+
+Otherwise the new page or file shows Cloudflare's "Sorry, you have been blocked" page. Blocked requests are listed in Security → Events.
+Note: Cloudflare merges `//` into `/` before the rule runs. Don't turn on Bot Fight Mode, because it breaks the Telegram webhook.
+
 ## Run it on your computer (before releasing)
 
 Needs [Node.js LTS](https://nodejs.org). It runs a **local copy**; the real database is never touched.
